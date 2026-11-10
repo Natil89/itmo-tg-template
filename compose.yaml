@@ -27,6 +27,11 @@ services:
     environment:
       BOT_TOKEN: ${BOT_TOKEN:?Задайте BOT_TOKEN}
       TELEGRAM_PROXY_URL: ${TELEGRAM_PROXY_URL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://openrouter.ai/api/v1}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      HISTORY_MAX_MESSAGES: ${HISTORY_MAX_MESSAGES:-20}
+      LLM_CONTEXT_BUDGET: ${LLM_CONTEXT_BUDGET:-32000}
       POSTGRES_HOST: db
       POSTGRES_PORT: "5432"
       POSTGRES_DB: ${POSTGRES_DB:-bot}
