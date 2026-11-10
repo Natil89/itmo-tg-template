@@ -120,3 +120,94 @@ async def test_real_db_password_restart_health_and_persistence(database):
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         await pool.close()
+
+
+async def test_user_modes_are_isolated_clear_history_and_survive_reconnection(database):
+    # Arrange
+    from app.user_state import UserStateStore
+
+    settings, _, _, _ = database
+    pool = await create_pool(settings)
+    try:
+        store = UserStateStore(pool)
+        # Таблица из предыдущей версии приложения, без колонки temperature.
+        await pool.execute(
+            "CREATE TABLE assistant_user_state ("
+            "chat_id BIGINT PRIMARY KEY, "
+            "mode TEXT NOT NULL DEFAULT 'study' CHECK (mode IN ('study', 'translate', 'quiz')), "
+            "history JSONB NOT NULL DEFAULT '[]'::jsonb)"
+        )
+        await pool.execute(
+            "INSERT INTO assistant_user_state (chat_id, mode, history) VALUES (404, 'quiz', $1)",
+            json.dumps([{"role": "user", "content": "Старый вопрос"}]),
+        )
+        await store.initialize()
+        assert await store.get_mode(404) == "quiz"
+        assert await store.get_history(404) == [{"role": "user", "content": "Старый вопрос"}]
+        assert await store.get_temperature(404) == 0.3
+        assert await store.get_mode(101) == "study"
+        assert await store.get_temperature(101) == 0.3
+        assert await store.get_history(101) == []
+        history = [
+            {"role": "user", "content": "Учебный пример 👋"},
+            {"role": "assistant", "content": "Ответ модели"},
+        ]
+        await store.save_history(101, history)
+        assert await store.get_mode(101) == "study"
+        assert await store.get_history(101) == history
+        await store.set_mode(101, "translate")
+        assert await store.get_history(101) == []
+        await store.set_mode(202, "quiz")
+        await store.save_history(101, history)
+        await store.save_history(202, history)
+        await store.set_temperature(101, 0.7)
+        await store.set_temperature(202, 1.0)
+        assert await store.get_history(101) == history
+        assert await store.get_mode(101) == "translate"
+        assert await store.get_mode(202) == "quiz"
+        replacement = [{"role": "user", "content": "Другой вопрос"}]
+        await store.save_history(101, replacement)
+        assert await store.get_history(101) == replacement
+        assert await store.get_history(202) == history
+        # Сброс истории сохраняет режим и температуру и не трогает второй чат.
+        await store.save_history(101, [])
+        assert await store.get_mode(101) == "translate"
+        assert await store.get_temperature(101) == 0.7
+        assert await store.get_history(101) == []
+        assert await store.get_history(202) == history
+        await store.save_history(101, replacement)
+        # Act: переключаем только одного пользователя.
+        await store.set_mode(101, "study")
+        # Assert
+        assert await store.get_mode(101) == "study"
+        assert await store.get_mode(202) == "quiz"
+        assert await store.get_history(101) == []
+        assert await store.get_history(202) == history
+        with pytest.raises(asyncpg.CheckViolationError):
+            await pool.execute(
+                "UPDATE assistant_user_state SET temperature = 0.5 WHERE chat_id = 101"
+            )
+        # Ограничение схемы также отклоняет неизвестный режим.
+        with pytest.raises(asyncpg.CheckViolationError):
+            await pool.execute(
+                "UPDATE assistant_user_state SET mode = $1 WHERE chat_id = $2", "bad", 101
+            )
+    finally:
+        await pool.close()
+
+    # Act: новый пул и новый экземпляр хранилища, как после перезапуска приложения.
+    pool = await create_pool(settings)
+    try:
+        store = UserStateStore(pool)
+        await store.initialize()
+        # Assert: повторная подготовка схемы не сбрасывает настройки.
+        assert await store.get_mode(101) == "study"
+        assert await store.get_mode(202) == "quiz"
+        assert await store.get_mode(303) == "study"
+        assert await store.get_temperature(101) == 0.7
+        assert await store.get_temperature(202) == 1.0
+        assert await store.get_history(101) == []
+        assert await store.get_history(202) == history
+        assert await store.get_history(303) == []
+    finally:
+        await pool.close()
