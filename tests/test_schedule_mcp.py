@@ -60,12 +60,19 @@ def test_invalid_source_has_safe_error(tmp_path, contents):
 async def test_real_stdio_discovery_call_resource_and_rejected_arguments():
     async with connect_schedule() as client:
         assert client.session is not None
-        assert {tool.name for tool in client.tools} == {"get_schedule", "get_weather"}
+        assert {tool.name for tool in client.tools} == {
+            "get_schedule",
+            "get_weather",
+            "search_materials",
+        }
         tool = next(tool for tool in client.tools if tool.name == "get_schedule")
         assert tool.inputSchema["additionalProperties"] is False
         assert tool.outputSchema["properties"]["lessons"]["type"] == "array"
         assert tool.annotations.readOnlyHint is True
-        assert [str(resource.uri) for resource in client.resources] == ["schedule://current-week"]
+        assert [str(resource.uri) for resource in client.resources] == [
+            "schedule://current-week",
+            "materials://catalog",
+        ]
         result = await client.session.call_tool("get_schedule", {"date": "2026-11-16"})
         assert not result.isError
         assert result.structuredContent["lessons"][0]["title"] == "Программирование"
@@ -204,7 +211,11 @@ async def test_slow_server_can_initialize_with_separate_startup_budget(monkeypat
     monkeypatch.setattr(mcp_client, "stdio_client", slow_process)
     async with connect_schedule(startup_timeout_seconds=60, request_timeout_seconds=2) as client:
         assert client.session is not None
-        assert {tool.name for tool in client.tools} == {"get_schedule", "get_weather"}
+        assert {tool.name for tool in client.tools} == {
+            "get_schedule",
+            "get_weather",
+            "search_materials",
+        }
 
 
 async def test_startup_timeout_closes_transport_and_logs_safe_stage(monkeypatch, caplog):

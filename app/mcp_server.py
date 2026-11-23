@@ -13,7 +13,9 @@ import mcp.server.stdio
 import mcp.types as types
 from mcp.server.lowlevel import Server
 from mcp.server.lowlevel.helper_types import ReadResourceContents
+from pydantic import ValidationError
 
+from app.materials import MaterialsError, MaterialsService, SearchQuery, SearchResult
 from app.mcp_identity import IdentityError, verify_context
 from app.personal_schedule import (
     LessonDraft,
@@ -32,6 +34,7 @@ def create_server(
     personal_store: PersonalScheduleStore | None = None,
     context_secret: str = "",
     reminders: ReminderStore | None = None,
+    materials: MaterialsService | None = None,
 ) -> Server:
     server = Server("study-schedule")
 
@@ -113,6 +116,19 @@ def create_server(
                     ),
                 )
             )
+        if materials is not None:
+            tools.append(
+                types.Tool(
+                    name="search_materials",
+                    description=(
+                        "Поиск по ограниченному локальному учебному корпусу. "
+                        "Возвращает фрагменты и источники."
+                    ),
+                    inputSchema=SearchQuery.model_json_schema(),
+                    outputSchema=SearchResult.model_json_schema(),
+                    annotations=types.ToolAnnotations(readOnlyHint=True, destructiveHint=False),
+                )
+            )
         return tools
 
     def identity(scope: str, arguments: dict) -> tuple[int, str | None]:
@@ -127,7 +143,11 @@ def create_server(
     @server.call_tool()
     async def call_tool(name: str, arguments: dict) -> types.CallToolResult:
         try:
-            if name == "get_schedule":
+            if name == "search_materials" and materials is not None:
+                query = SearchQuery.model_validate(arguments)
+                found = await asyncio.to_thread(materials.search, query)
+                result = found.model_dump(mode="json")
+            elif name == "get_schedule":
                 if set(arguments) != {"date"} or not isinstance(arguments["date"], str):
                     raise ScheduleError("Нужен только строковый аргумент date.")
                 if personal_store is not None:
@@ -155,12 +175,18 @@ def create_server(
                 result = (await reminders.execute(user_id, action_id, draft)).model_dump()
             else:
                 raise ScheduleError("Неизвестный инструмент.")
+        except ValidationError:
+            return types.CallToolResult(
+                isError=True,
+                content=[types.TextContent(type="text", text="Аргументы не прошли проверку.")],
+            )
         except (
             ScheduleError,
             WeatherError,
             PersonalScheduleError,
             ReminderError,
             IdentityError,
+            MaterialsError,
         ) as error:
             return types.CallToolResult(
                 isError=True, content=[types.TextContent(type="text", text=str(error))]
@@ -172,7 +198,7 @@ def create_server(
 
     @server.list_resources()
     async def list_resources() -> list[types.Resource]:
-        return [
+        resources = [
             types.Resource(
                 uri="schedule://current-week",
                 name="Расписание текущей недели",
@@ -180,9 +206,26 @@ def create_server(
                 mimeType="application/json",
             )
         ]
+        if materials is not None:
+            resources.append(
+                types.Resource(
+                    name="Каталог учебных материалов",
+                    uri="materials://catalog",
+                    mimeType="application/json",
+                    description="Идентификаторы, названия и источники документов.",
+                )
+            )
+        return resources
 
     @server.read_resource()
     async def read_resource(uri) -> list[ReadResourceContents]:
+        if str(uri) == "materials://catalog" and materials is not None:
+            catalog = await asyncio.to_thread(materials.catalog)
+            return [
+                ReadResourceContents(
+                    content=catalog.model_dump_json(), mime_type="application/json"
+                )
+            ]
         if str(uri) != "schedule://current-week":
             raise ValueError("Неизвестный ресурс.")
         if personal_store is not None:
@@ -227,6 +270,7 @@ async def serve(service: ScheduleService, weather_policy: str = "strict") -> Non
                 store,
                 secret,
                 reminders=reminders,
+                materials=MaterialsService(),
             )
             async with mcp.server.stdio.stdio_server() as (reader, writer):
                 await server.run(reader, writer, server.create_initialization_options())

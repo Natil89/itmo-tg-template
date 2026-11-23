@@ -84,17 +84,41 @@ def user_request(*, actor_id: int, text: str, now: datetime, timezone: str) -> A
 
 class ScheduleFacts(Contract):
     kind: Literal["schedule"] = "schedule"
-    days: tuple[DaySchedule, ...]
+    days: tuple[DaySchedule, ...] = Field(min_length=1, max_length=7)
 
 
 class MaterialHit(Contract):
     document_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     title: str = Field(min_length=1, max_length=200)
     excerpt: str = Field(min_length=1, max_length=4000)
+    source_url: str | None = Field(
+        default=None,
+        pattern=r"^https://ai-in-sd-y29\.github\.io/\.github/profile/lectures/[^\s]*$",
+    )
 
     @property
     def source(self) -> str:
-        return f"materials://{self.document_id}"
+        return self.source_url or f"materials://{self.document_id}"
+
+
+class MaterialEntry(Contract):
+    document_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
+    title: str = Field(min_length=1, max_length=200)
+    source_url: str | None = Field(
+        default=None,
+        pattern=r"^https://ai-in-sd-y29\.github\.io/\.github/profile/lectures/[^\s]*$",
+    )
+
+
+class MaterialCatalog(Contract):
+    documents: tuple[MaterialEntry, ...] = Field(max_length=100)
+
+    @model_validator(mode="after")
+    def unique_documents(self) -> "MaterialCatalog":
+        ids = [entry.document_id for entry in self.documents]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Идентификаторы документов должны быть уникальны.")
+        return self
 
 
 class KnowledgeFacts(Contract):

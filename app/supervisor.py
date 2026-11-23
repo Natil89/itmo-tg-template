@@ -101,6 +101,8 @@ class Supervisor:
                 or result.trace_id != request.trace_id
                 or result.component != route.target
                 or result.used_tools != scope.used_tools
+                or result.facts != scope.facts
+                or result.status != scope.status
             ):
                 raise ValueError("Результат не соответствует вызову.")
         except asyncio.CancelledError:

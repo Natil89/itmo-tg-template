@@ -154,6 +154,7 @@ async def test_signed_mcp_isolates_users_resources_and_confirmed_writes(database
                 "get_weather",
                 "add_lesson",
                 "add_reminder",
+                "search_materials",
             }
             args = {"date": DRAFT.date}
             assert (await mcp.session.call_tool("get_schedule", args)).isError
