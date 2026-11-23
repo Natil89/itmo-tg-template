@@ -1,9 +1,11 @@
 .venv/
+.venv-windows/
 .env
 .env.cloud
 .deploy/
 __pycache__/
 .pytest_cache/
+.pytest-tmp-*/
 .ruff_cache/
 *.pyc
 *.egg-info/
