@@ -1,18 +1,25 @@
 import argparse
 import asyncio
 import logging
+from urllib.parse import unquote, urlsplit
 
 from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiohttp import ClientSession
 
+from app.audit import AuditStore
 from app.config import ConfigError, Settings
 from app.db import create_pool
 from app.handlers.assistant import create_router
 from app.health import HealthState, start_health_server
 from app.llm import LlmClient
 from app.logging_setup import configure_logging
-from app.telegram import create_bot
+from app.mcp_client import connect_schedule
+from app.personal_schedule import PersonalScheduleStore
+from app.reminders import ReminderStore
+from app.schedule_agent import ScheduleAgent
+from app.telegram import TelegramStartupError, check_telegram_startup, create_bot
+from app.timezones import TimezoneResolver
 from app.user_state import UserStateStore
 
 logger = logging.getLogger("app")
@@ -27,24 +34,54 @@ async def run(settings: Settings) -> None:
         state.pool = await create_pool(settings)
         user_state = UserStateStore(state.pool)
         await user_state.initialize()
+        personal_schedule = PersonalScheduleStore(state.pool)
+        await personal_schedule.initialize()
+        reminders = ReminderStore(state.pool)
+        await reminders.initialize()
+        proxy_password = urlsplit(settings.telegram_proxy_url).password or ""
+        audit_store = AuditStore(
+            state.pool,
+            secrets=(
+                settings.bot_token,
+                settings.llm_api_key,
+                settings.postgres_password,
+                settings.telegram_proxy_url,
+                proxy_password,
+                unquote(proxy_password),
+            ),
+        )
+        await audit_store.initialize()
         logger.info("PostgreSQL подключён: SELECT 1 выполнен.")
         # Начальная проверка токена и маршрута через прокси ограничена по времени.
         async with asyncio.timeout(30):
-            me = await bot.get_me()
-            webhook = await bot.get_webhook_info()
+            me, webhook = await check_telegram_startup(bot)
         if webhook.url:
             raise ConfigError(
                 "У бота установлен webhook. Удалите его перед запуском polling "
                 "или используйте отдельного учебного бота."
             )
         logger.info("Telegram доступен. Бот @%s запускает polling.", me.username)
-        async with ClientSession() as llm_session:
+        async with (
+            ClientSession() as llm_session,
+            connect_schedule(
+                settings.schedule_file,
+                settings.schedule_timezone,
+                database_settings=settings,
+            ) as schedule_mcp,
+        ):
             llm = LlmClient(
                 llm_session,
                 api_key=settings.llm_api_key,
                 model=settings.llm_model,
                 base_url=settings.llm_base_url,
                 history_limits=settings.history_limits,
+            )
+            schedule_agent = ScheduleAgent(
+                llm,
+                schedule_mcp,
+                settings.schedule_timezone,
+                personal_store=personal_schedule,
+                reminders=reminders,
             )
             # В личном чате вопрос и команда режима меняют одну строку истории.
             dispatcher = Dispatcher(events_isolation=SimpleEventIsolation())
@@ -55,6 +92,12 @@ async def run(settings: Settings) -> None:
                     bot,
                     db=state.pool,
                     llm=llm,
+                    schedule_mcp=schedule_mcp,
+                    schedule_agent=schedule_agent,
+                    personal_schedule=personal_schedule,
+                    reminders=reminders,
+                    audit_store=audit_store,
+                    timezone_resolver=TimezoneResolver(llm_session),
                     user_state=user_state,
                     history_limits=settings.history_limits,
                     allowed_updates=dispatcher.resolve_used_update_types(),
@@ -99,6 +142,9 @@ def main() -> int:
         asyncio.run(run(settings))
     except KeyboardInterrupt:
         logger.info("Бот остановлен.")
+    except TelegramStartupError as error:
+        logger.error("%s", error)
+        return 1
     except Exception:
         logger.exception("Не удалось запустить бот. Проверьте БД, токен, прокси и настройки LLM.")
         return 1

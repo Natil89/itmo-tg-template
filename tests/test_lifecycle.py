@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, Mock
 
 import pytest
@@ -123,6 +124,12 @@ async def test_polling_failure_or_cancellation_closes_llm_session_and_other_reso
     from app import __main__ as application
 
     sessions = []
+
+    @asynccontextmanager
+    async def disconnected_mcp(*args, **kwargs):
+        yield Mock()
+
+    monkeypatch.setattr(application, "connect_schedule", disconnected_mcp)
 
     def session_factory():
         session = ClientSession()

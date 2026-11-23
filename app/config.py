@@ -5,11 +5,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiogram.utils.token import TokenValidationError, validate_token
 from dotenv import dotenv_values
 
 from app.history import DEFAULT_HISTORY_LIMITS, HistoryLimits
+from app.schedule import DEFAULT_SCHEDULE
 
 
 class ConfigError(ValueError):
@@ -31,6 +33,9 @@ class Settings:
     llm_model: str = ""
     llm_base_url: str = field(default="https://openrouter.ai/api/v1", repr=False)
     history_limits: HistoryLimits = DEFAULT_HISTORY_LIMITS
+    schedule_file: Path = DEFAULT_SCHEDULE
+    schedule_timezone: str = "Europe/Moscow"
+    weather_location_policy: str = "population"
 
     def validate_llm(self) -> None:
         """LLM обязателен для бота, но не для подготовки БД и healthcheck."""
@@ -116,6 +121,14 @@ class Settings:
         level = value("LOG_LEVEL", "INFO").upper()
         if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ConfigError("LOG_LEVEL: используйте DEBUG, INFO, WARNING, ERROR или CRITICAL.")
+        schedule_timezone = value("SCHEDULE_TIMEZONE", "Europe/Moscow")
+        weather_policy = value("WEATHER_LOCATION_POLICY", "population")
+        if weather_policy not in {"strict", "population"}:
+            raise ConfigError("WEATHER_LOCATION_POLICY: выберите strict или population.")
+        try:
+            ZoneInfo(schedule_timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ConfigError("SCHEDULE_TIMEZONE: укажите существующую IANA-зону.") from None
         settings = cls(
             bot_token=token,
             postgres_password=password,
@@ -126,6 +139,9 @@ class Settings:
             postgres_user=value("POSTGRES_USER", "bot"),
             log_level=level,
             health_port=port("HEALTH_PORT", "8080"),
+            schedule_file=Path(value("SCHEDULE_FILE", str(DEFAULT_SCHEDULE))),
+            schedule_timezone=schedule_timezone,
+            weather_location_policy=weather_policy,
             llm_api_key=value("LLM_API_KEY").strip(),
             llm_model=value("LLM_MODEL").strip(),
             llm_base_url=value("LLM_BASE_URL", "https://openrouter.ai/api/v1").strip(),

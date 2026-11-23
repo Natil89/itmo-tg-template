@@ -20,13 +20,14 @@ def test_local_and_cloud_compose_ports_credentials_and_healthchecks(tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text(
         "BOT_TOKEN=test\nPOSTGRES_PORT=55432\nLLM_API_KEY=fake-key\nLLM_MODEL=test/model\n"
+        "WEATHER_LOCATION_POLICY=strict\n"
         "POSTGRES_PASSWORD=" + compose_quote(password) + "\n",
         encoding="utf-8",
     )
     environ = {
         key: value
         for key, value in os.environ.items()
-        if not key.startswith(("POSTGRES_", "BOT_TOKEN", "COMPOSE_", "LLM_"))
+        if not key.startswith(("POSTGRES_", "BOT_TOKEN", "COMPOSE_", "LLM_", "WEATHER_"))
     }
     command = compose_command(root)
     command[command.index("--env-file") + 1] = str(env_file)
@@ -67,6 +68,7 @@ def test_local_and_cloud_compose_ports_credentials_and_healthchecks(tmp_path):
     assert cloud["bot"]["environment"]["POSTGRES_PORT"] == "5432"
     assert cloud["bot"]["environment"]["LLM_API_KEY"] == "fake-key"
     assert cloud["bot"]["environment"]["LLM_MODEL"] == "test/model"
+    assert cloud["bot"]["environment"]["WEATHER_LOCATION_POLICY"] == "strict"
     assert "app.healthcheck" in cloud["bot"]["healthcheck"]["test"]
     assert cloud["bot"]["healthcheck"]["timeout"] == "20s"
     assert cloud["bot"]["depends_on"]["db"]["condition"] == "service_healthy"

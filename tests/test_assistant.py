@@ -25,6 +25,7 @@ async def dispatch(
     mode="study",
     user_state=None,
     chat_id=42,
+    schedule_agent=None,
 ):
     bot = Bot(TOKEN)
     bot.session = AsyncMock()
@@ -48,7 +49,11 @@ async def dispatch(
         photo=[PhotoSize(file_id="a", file_unique_id="b", width=1, height=1)] if photo else None,
     )
     await dispatcher.feed_update(
-        bot, Update(update_id=1, message=message), llm=llm, user_state=user_state
+        bot,
+        Update(update_id=1, message=message),
+        llm=llm,
+        user_state=user_state,
+        schedule_agent=schedule_agent,
     )
     sent = [
         call.args[1] for call in bot.session.call_args_list if isinstance(call.args[1], SendMessage)
@@ -70,6 +75,41 @@ async def test_question_is_sent_to_llm_and_answer_is_plain_text():
     assert [message.text for message in sent] == ["<b>Ответ</b> & текст"]
     assert sent[0].parse_mode is None
     assert sent[0].chat_id == 42
+
+
+async def test_question_uses_injected_schedule_agent_and_saves_final_answer():
+    # Arrange
+    agent = AsyncMock()
+    agent.answer.return_value = "Завтра в 09:00 — Программирование."
+    store = AsyncMock()
+    store.get_mode.return_value = "study"
+    store.get_history.return_value = []
+    store.get_temperature.return_value = 0.3
+    # Act
+    llm, sent = await dispatch(
+        "Какие занятия завтра?",
+        user_state=store,
+        schedule_agent=agent,
+    )
+    # Assert
+    llm.generate.assert_not_awaited()
+    agent.answer.assert_awaited_once_with(
+        "Какие занятия завтра?",
+        system_prompt=MODES["study"].system_prompt,
+        examples=MODES["study"].examples,
+        history=[],
+        temperature=0.3,
+        user_id=42,
+        update_id=1,
+    )
+    assert [message.text for message in sent] == ["Завтра в 09:00 — Программирование."]
+    store.save_history.assert_awaited_once_with(
+        42,
+        [
+            {"role": "user", "content": "Какие занятия завтра?"},
+            {"role": "assistant", "content": "Завтра в 09:00 — Программирование."},
+        ],
+    )
 
 
 @pytest.mark.parametrize(
@@ -118,7 +158,11 @@ async def test_markdown_is_sent_as_telegram_entities():
     assert {entity.type for entity in sent[0].entities} == {"bold", "code"}
 
 
-@pytest.mark.parametrize("answer", ["а" * 4096, "a" * 8193, "🙂" * 4097, "<b>\n" * 2000])
+@pytest.mark.parametrize(
+    "answer",
+    ["а" * 4096, "a" * 8193, "🙂" * 4097, "<b>\n" * 2000],
+    ids=["cyrillic", "ascii", "emoji", "markup"],
+)
 async def test_long_answer_is_sent_in_order_without_loss(answer):
     # Arrange / Act
     _, sent = await dispatch(answer=answer)
