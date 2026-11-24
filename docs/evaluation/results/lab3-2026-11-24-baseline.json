@@ -1,0 +1,512 @@
+{
+  "started_at": "2026-11-24T17:06:15.756559+03:00",
+  "model": "deepseek/deepseek-v4.1-flash",
+  "temperature": 0.3,
+  "dataset_sha256": "3a1e058d8f5c467eb84ac775f886b148b14a74c326015ebda9d175e26fb39236",
+  "evaluation_context": {
+    "now": "2026-10-12T09:00:00+03:00",
+    "timezone": "Europe/Moscow",
+    "city": "Санкт-Петербург, Россия"
+  },
+  "retry_from": null,
+  "change": null,
+  "cases": [
+    {
+      "id": "schedule_1",
+      "query": "Какие пары у меня завтра?",
+      "expected_target": "schedule",
+      "actual_target": null,
+      "correct": false,
+      "confidence": 0,
+      "duration_ms": 30028,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": null,
+      "provider_responses": []
+    },
+    {
+      "id": "schedule_2",
+      "query": "Напомни в пятницу в 17:00 отправить лабораторную.",
+      "expected_target": "schedule",
+      "actual_target": "schedule",
+      "correct": true,
+      "confidence": 0.98,
+      "duration_ms": 5649,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": true,
+      "specialist_status": "needs_clarification",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Modal",
+          "usage": {
+            "prompt_tokens": 380,
+            "completion_tokens": 52,
+            "total_tokens": 432
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "InferenceNet",
+          "usage": {
+            "prompt_tokens": 777,
+            "completion_tokens": 78,
+            "total_tokens": 855
+          }
+        }
+      ]
+    },
+    {
+      "id": "schedule_3",
+      "query": "Когда сегодня начинается первая пара?",
+      "expected_target": "schedule",
+      "actual_target": "schedule",
+      "correct": true,
+      "confidence": 0.98,
+      "duration_ms": 2278,
+      "tools": [
+        "get_schedule"
+      ],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "success",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Reka",
+          "usage": {
+            "prompt_tokens": 370,
+            "completion_tokens": 42,
+            "total_tokens": 412
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "River",
+          "usage": {
+            "prompt_tokens": 767,
+            "completion_tokens": 44,
+            "total_tokens": 811
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Alibaba",
+          "usage": {
+            "prompt_tokens": 838,
+            "completion_tokens": 28,
+            "total_tokens": 866
+          }
+        }
+      ]
+    },
+    {
+      "id": "schedule_4",
+      "query": "Покажи расписание занятий на эту неделю.",
+      "expected_target": "schedule",
+      "actual_target": "schedule",
+      "correct": true,
+      "confidence": 0.98,
+      "duration_ms": 979,
+      "tools": [],
+      "resources": [
+        "schedule://current-week"
+      ],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "success",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "InferenceNet",
+          "usage": {
+            "prompt_tokens": 374,
+            "completion_tokens": 41,
+            "total_tokens": 415
+          }
+        }
+      ]
+    },
+    {
+      "id": "knowledge_1",
+      "query": "По учебным материалам объясни назначение MCP.",
+      "expected_target": "knowledge",
+      "actual_target": "knowledge",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 2204,
+      "tools": [
+        "search_materials"
+      ],
+      "resources": [
+        "materials://catalog"
+      ],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "success",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "DigitalOcean",
+          "usage": {
+            "prompt_tokens": 374,
+            "completion_tokens": 51,
+            "total_tokens": 425
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Wafer",
+          "usage": {
+            "prompt_tokens": 432,
+            "completion_tokens": 62,
+            "total_tokens": 494
+          }
+        }
+      ]
+    },
+    {
+      "id": "knowledge_2",
+      "query": "Найди в материалах определение контекстного окна.",
+      "expected_target": "knowledge",
+      "actual_target": "knowledge",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 1699,
+      "tools": [
+        "search_materials"
+      ],
+      "resources": [
+        "materials://catalog"
+      ],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "success",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Ionstream",
+          "usage": {
+            "prompt_tokens": 376,
+            "completion_tokens": 40,
+            "total_tokens": 416
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Ionstream",
+          "usage": {
+            "prompt_tokens": 434,
+            "completion_tokens": 73,
+            "total_tokens": 507
+          }
+        }
+      ]
+    },
+    {
+      "id": "knowledge_3",
+      "query": "Какие правила в конспекте относятся к структурированному выводу?",
+      "expected_target": "knowledge",
+      "actual_target": "knowledge",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 2257,
+      "tools": [
+        "search_materials"
+      ],
+      "resources": [
+        "materials://catalog"
+      ],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "success",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Wafer",
+          "usage": {
+            "prompt_tokens": 380,
+            "completion_tokens": 51,
+            "total_tokens": 431
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "InferenceNet",
+          "usage": {
+            "prompt_tokens": 438,
+            "completion_tokens": 109,
+            "total_tokens": 547
+          }
+        }
+      ]
+    },
+    {
+      "id": "knowledge_4",
+      "query": "Составь краткое объяснение идемпотентности по учебным документам.",
+      "expected_target": "knowledge",
+      "actual_target": "knowledge",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 2723,
+      "tools": [
+        "search_materials"
+      ],
+      "resources": [
+        "materials://catalog"
+      ],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "success",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "River",
+          "usage": {
+            "prompt_tokens": 382,
+            "completion_tokens": 42,
+            "total_tokens": 424
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "InferenceNet",
+          "usage": {
+            "prompt_tokens": 440,
+            "completion_tokens": 113,
+            "total_tokens": 553
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifestyle_1",
+      "query": "Какая сейчас погода в моём городе?",
+      "expected_target": "lifestyle",
+      "actual_target": "lifestyle",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 2594,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "needs_clarification",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "DigitalOcean",
+          "usage": {
+            "prompt_tokens": 373,
+            "completion_tokens": 46,
+            "total_tokens": 419
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "OpenInference",
+          "usage": {
+            "prompt_tokens": 585,
+            "completion_tokens": 38,
+            "total_tokens": 623
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifestyle_2",
+      "query": "Стоит ли сегодня брать зонт?",
+      "expected_target": "lifestyle",
+      "actual_target": "lifestyle",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 1640,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "needs_clarification",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 373,
+            "completion_tokens": 37,
+            "total_tokens": 410
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Reka",
+          "usage": {
+            "prompt_tokens": 583,
+            "completion_tokens": 30,
+            "total_tokens": 613
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifestyle_3",
+      "query": "Сильный ли сейчас ветер?",
+      "expected_target": "lifestyle",
+      "actual_target": "lifestyle",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 1280,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "needs_clarification",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "InferenceNet",
+          "usage": {
+            "prompt_tokens": 369,
+            "completion_tokens": 44,
+            "total_tokens": 413
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Together",
+          "usage": {
+            "prompt_tokens": 579,
+            "completion_tokens": 30,
+            "total_tokens": 609
+          }
+        }
+      ]
+    },
+    {
+      "id": "lifestyle_4",
+      "query": "Как одеться с учётом текущей погоды?",
+      "expected_target": "lifestyle",
+      "actual_target": "lifestyle",
+      "correct": true,
+      "confidence": 0.95,
+      "duration_ms": 1818,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": "needs_clarification",
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 375,
+            "completion_tokens": 57,
+            "total_tokens": 432
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Relace",
+          "usage": {
+            "prompt_tokens": 585,
+            "completion_tokens": 28,
+            "total_tokens": 613
+          }
+        }
+      ]
+    },
+    {
+      "id": "clarify_1",
+      "query": "Подготовь меня к завтрашнему дню.",
+      "expected_target": "clarify",
+      "actual_target": "clarify",
+      "correct": true,
+      "confidence": 0.9,
+      "duration_ms": 807,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": null,
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 375,
+            "completion_tokens": 55,
+            "total_tokens": 430
+          }
+        }
+      ]
+    },
+    {
+      "id": "clarify_2",
+      "query": "Сделай что-нибудь полезное.",
+      "expected_target": "clarify",
+      "actual_target": "clarify",
+      "correct": true,
+      "confidence": 0.9,
+      "duration_ms": 1075,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": null,
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Wafer",
+          "usage": {
+            "prompt_tokens": 373,
+            "completion_tokens": 42,
+            "total_tokens": 415
+          }
+        }
+      ]
+    },
+    {
+      "id": "clarify_3",
+      "query": "Расскажи, что для меня важно сегодня.",
+      "expected_target": "clarify",
+      "actual_target": "clarify",
+      "correct": true,
+      "confidence": 0.8,
+      "duration_ms": 539,
+      "tools": [],
+      "resources": [],
+      "reminder_prepared_in_memory": false,
+      "specialist_status": null,
+      "provider_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Together",
+          "usage": {
+            "prompt_tokens": 372,
+            "completion_tokens": 49,
+            "total_tokens": 421
+          }
+        }
+      ]
+    }
+  ],
+  "correct": 14,
+  "total": 15,
+  "supervisor_timeout_seconds": 30
+}

@@ -5,9 +5,13 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from aiogram.utils.token import TokenValidationError, validate_token
 from dotenv import dotenv_values
+
+from app.history import DEFAULT_HISTORY_LIMITS, HistoryLimits
+from app.schedule import DEFAULT_SCHEDULE
 
 
 class ConfigError(ValueError):
@@ -25,10 +29,43 @@ class Settings:
     postgres_user: str = "bot"
     log_level: str = "INFO"
     health_port: int = 8080
+    llm_api_key: str = field(default="", repr=False)
+    llm_model: str = ""
+    llm_base_url: str = field(default="https://openrouter.ai/api/v1", repr=False)
+    history_limits: HistoryLimits = DEFAULT_HISTORY_LIMITS
+    schedule_file: Path = DEFAULT_SCHEDULE
+    schedule_timezone: str = "Europe/Moscow"
+    weather_location_policy: str = "population"
+    reminder_delivery_enabled: bool = False
+
+    def validate_llm(self) -> None:
+        """LLM обязателен для бота, но не для подготовки БД и healthcheck."""
+        if not self.llm_api_key.strip():
+            raise ConfigError("LLM_API_KEY: укажите ключ доступа к модели.")
+        if not self.llm_model.strip():
+            raise ConfigError("LLM_MODEL: укажите идентификатор модели.")
+        try:
+            parsed = urlsplit(self.llm_base_url)
+            if (
+                parsed.scheme != "https"
+                or not parsed.hostname
+                or parsed.username is not None
+                or parsed.password is not None
+                or parsed.query
+                or parsed.fragment
+                or (parsed.port is not None and not 1 <= parsed.port <= 65535)
+            ):
+                raise ValueError
+        except ValueError:
+            raise ConfigError("LLM_BASE_URL: нужен HTTPS-адрес API без учётных данных.") from None
 
     @classmethod
     def load(
-        cls, env_file: Path | str = ".env", *, environ: Mapping[str, str] | None = None
+        cls,
+        env_file: Path | str = ".env",
+        *,
+        environ: Mapping[str, str] | None = None,
+        require_llm: bool = False,
     ) -> "Settings":
         values = {
             **dotenv_values(env_file, interpolate=False),
@@ -46,6 +83,15 @@ class Settings:
                 return result
             except ValueError:
                 raise ConfigError(f"{key}: нужен номер порта от 1 до 65535.") from None
+
+        def history_limit(key: str, default: int, minimum: int) -> int:
+            try:
+                result = int(value(key, str(default)))
+                if result < minimum:
+                    raise ValueError
+                return result
+            except ValueError:
+                raise ConfigError(f"{key}: нужно целое число от {minimum}.") from None
 
         token = value("BOT_TOKEN")
         try:
@@ -76,7 +122,18 @@ class Settings:
         level = value("LOG_LEVEL", "INFO").upper()
         if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ConfigError("LOG_LEVEL: используйте DEBUG, INFO, WARNING, ERROR или CRITICAL.")
-        return cls(
+        schedule_timezone = value("SCHEDULE_TIMEZONE", "Europe/Moscow")
+        delivery_enabled = value("REMINDER_DELIVERY_ENABLED", "false").lower()
+        if delivery_enabled not in {"true", "false"}:
+            raise ConfigError("REMINDER_DELIVERY_ENABLED: используйте true или false.")
+        weather_policy = value("WEATHER_LOCATION_POLICY", "population")
+        if weather_policy not in {"strict", "population"}:
+            raise ConfigError("WEATHER_LOCATION_POLICY: выберите strict или population.")
+        try:
+            ZoneInfo(schedule_timezone)
+        except (ZoneInfoNotFoundError, ValueError):
+            raise ConfigError("SCHEDULE_TIMEZONE: укажите существующую IANA-зону.") from None
+        settings = cls(
             bot_token=token,
             postgres_password=password,
             telegram_proxy_url=proxy,
@@ -86,4 +143,22 @@ class Settings:
             postgres_user=value("POSTGRES_USER", "bot"),
             log_level=level,
             health_port=port("HEALTH_PORT", "8080"),
+            schedule_file=Path(value("SCHEDULE_FILE", str(DEFAULT_SCHEDULE))),
+            schedule_timezone=schedule_timezone,
+            weather_location_policy=weather_policy,
+            reminder_delivery_enabled=delivery_enabled == "true",
+            llm_api_key=value("LLM_API_KEY").strip(),
+            llm_model=value("LLM_MODEL").strip(),
+            llm_base_url=value("LLM_BASE_URL", "https://openrouter.ai/api/v1").strip(),
+            history_limits=HistoryLimits(
+                max_messages=history_limit(
+                    "HISTORY_MAX_MESSAGES", DEFAULT_HISTORY_LIMITS.max_messages, 2
+                ),
+                context_budget=history_limit(
+                    "LLM_CONTEXT_BUDGET", DEFAULT_HISTORY_LIMITS.context_budget, 1001
+                ),
+            ),
         )
+        if require_llm:
+            settings.validate_llm()
+        return settings

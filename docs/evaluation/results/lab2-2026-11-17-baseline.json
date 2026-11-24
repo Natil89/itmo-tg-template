@@ -1,0 +1,839 @@
+{
+  "status": "complete",
+  "started_at": "2026-11-17T02:22:29.679450+03:00",
+  "dataset_sha256": "29eb84d05a04d1f60667bed93134bed1946289502bdf34222e19a3244a742ba7",
+  "source_sha256": {
+    "app/schedule_agent.py": "77ddcbdba1e7db1b84735e0ef58899e097a31d098c5140621273efba9878a673",
+    "app/llm.py": "0aa3a8770c579f6cd8d63620f1138e556e8e4ee2b9af710592e8a555ad8cc9e8",
+    "app/mcp_server.py": "1f73ddec560731b0c27fc66faa2928cf981b4f86b402c468ae12af322bd639a5",
+    "app/modes.py": "d49d926714a7523f5c7b5b506eb24f5dd13e8d6ca1452a61bedec9b2e177a70e",
+    "app/reminders.py": "822272ff1251e7ca1bf46edbc960b9b10cdf1bcf6917181bde9b10af5042cfd0",
+    "app/audit.py": "33b318d5f02e8c0b27dba1b840d27c7a2df21e614ee4987dee2a29c1f3cdf9b4",
+    "app/weather.py": "26455cd987a9401f22f15eb8e0d258064ad7a59461cb42241ede5cfd8ba040b3",
+    "app/schedule.py": "a319971a0f6f9d84c701e425993ffdc14b80aca884c19440e4756844d72be0c9",
+    "scripts/evaluate_lab2.py": "095e1fc229f689235a215206fe6e1b206c3556c325be6d98b8c89dcb0f7a76e4"
+  },
+  "requested_model": "deepseek/deepseek-v4.1-flash",
+  "temperature": 0.3,
+  "max_tokens": 1000,
+  "context_budget": 32000,
+  "history_max_messages": 20,
+  "evaluation_context": {
+    "now": "2026-10-12T09:00:00+03:00",
+    "timezone": "Europe/Moscow"
+  },
+  "history": [],
+  "weather_policy": "strict",
+  "retry_from": null,
+  "change_note": "",
+  "cases": [
+    {
+      "id": "weather_1",
+      "query": "Какая сейчас погода в Санкт-Петербурге?",
+      "expected_action": "get_weather",
+      "expected_arguments": {
+        "city": "Санкт-Петербург"
+      },
+      "actual_action": "get_weather",
+      "actual_arguments": {
+        "city": "Санкт-Петербург"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Санкт-Петербург, Россия\nТемпература: 10 °C\nВетер: 2 м/с; пасмурно.\nНаблюдение: 12.10.2026 09:00 (Europe/Moscow).\nИсточник: Open-Meteo.",
+      "error": null,
+      "duration_ms": 1975,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_28dc72462010c7b41fd136bd",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"Санкт-Петербург\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "get_weather",
+          "arguments": {
+            "city": "Санкт-Петербург"
+          },
+          "validation": "passed",
+          "execution": "success",
+          "reason": "live_weather"
+        }
+      ],
+      "mcp_calls": [
+        {
+          "name": "get_weather",
+          "arguments": {
+            "city": "Санкт-Петербург"
+          }
+        }
+      ],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Reka",
+          "usage": {
+            "prompt_tokens": 2157,
+            "completion_tokens": 45,
+            "total_tokens": 2202
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "River",
+          "usage": {
+            "prompt_tokens": 2345,
+            "completion_tokens": 59,
+            "total_tokens": 2404
+          }
+        }
+      ]
+    },
+    {
+      "id": "weather_2",
+      "query": "Нужен ли сегодня зонт в Казани?",
+      "expected_action": "get_weather",
+      "expected_arguments": {
+        "city": "Казань"
+      },
+      "actual_action": "get_weather",
+      "actual_arguments": {
+        "city": "Казань"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Казань, Россия\nТемпература: 10 °C\nВетер: 2 м/с; пасмурно.\nНаблюдение: 12.10.2026 09:00 (Europe/Moscow).\nИсточник: Open-Meteo.",
+      "error": null,
+      "duration_ms": 2146,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-a965cbf5f5d03319",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"Казань\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "get_weather",
+          "arguments": {
+            "city": "Казань"
+          },
+          "validation": "passed",
+          "execution": "success",
+          "reason": "live_weather"
+        }
+      ],
+      "mcp_calls": [
+        {
+          "name": "get_weather",
+          "arguments": {
+            "city": "Казань"
+          }
+        }
+      ],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2156,
+            "completion_tokens": 41,
+            "total_tokens": 2197
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2336,
+            "completion_tokens": 174,
+            "total_tokens": 2510
+          }
+        }
+      ]
+    },
+    {
+      "id": "weather_3",
+      "query": "Сколько сейчас градусов в Тбилиси, Грузия?",
+      "expected_action": "get_weather",
+      "expected_arguments": {
+        "city": "Тбилиси, Грузия"
+      },
+      "actual_action": "get_weather",
+      "actual_arguments": {
+        "city": "Тбилиси, Грузия"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Тбилиси, Грузия\nТемпература: 10 °C\nВетер: 2 м/с; пасмурно.\nНаблюдение: 12.10.2026 09:00 (Europe/Moscow).\nИсточник: Open-Meteo.",
+      "error": null,
+      "duration_ms": 1529,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-9fc4276a966f7a99",
+            "type": "function",
+            "function": {
+              "name": "get_weather",
+              "arguments": "{\"city\": \"Тбилиси, Грузия\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "get_weather",
+          "arguments": {
+            "city": "Тбилиси, Грузия"
+          },
+          "validation": "passed",
+          "execution": "success",
+          "reason": "live_weather"
+        }
+      ],
+      "mcp_calls": [
+        {
+          "name": "get_weather",
+          "arguments": {
+            "city": "Тбилиси, Грузия"
+          }
+        }
+      ],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2158,
+            "completion_tokens": 45,
+            "total_tokens": 2203
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2342,
+            "completion_tokens": 81,
+            "total_tokens": 2423
+          }
+        }
+      ]
+    },
+    {
+      "id": "schedule_1",
+      "query": "Какие занятия у меня сегодня?",
+      "expected_action": "get_schedule",
+      "expected_arguments": {
+        "date": "2026-10-12"
+      },
+      "actual_action": "get_schedule",
+      "actual_arguments": {
+        "date": "2026-10-12"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Сегодня, 12 октября 2026 года, занятий в вашем расписании нет — список пуст.\n\nЕсли хотите, могу добавить занятие: назовите время начала и конца, название и место.",
+      "error": null,
+      "duration_ms": 1557,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_332e01e07af641febd238967",
+            "type": "function",
+            "function": {
+              "name": "get_schedule",
+              "arguments": "{\"date\":\"2026-10-12\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "get_schedule",
+          "arguments": {
+            "date": "2026-10-12"
+          },
+          "validation": "passed",
+          "execution": "success",
+          "reason": "personal_schedule"
+        }
+      ],
+      "mcp_calls": [
+        {
+          "name": "get_schedule",
+          "arguments": {
+            "date": "2026-10-12"
+          }
+        }
+      ],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Fireworks",
+          "usage": {
+            "prompt_tokens": 2150,
+            "completion_tokens": 44,
+            "total_tokens": 2194
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "DeepInfra",
+          "usage": {
+            "prompt_tokens": 2234,
+            "completion_tokens": 48,
+            "total_tokens": 2282
+          }
+        }
+      ]
+    },
+    {
+      "id": "schedule_2",
+      "query": "Покажи расписание на завтра.",
+      "expected_action": "get_schedule",
+      "expected_arguments": {
+        "date": "2026-10-13"
+      },
+      "actual_action": "get_schedule",
+      "actual_arguments": {
+        "date": "2026-10-13"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "На завтра, 13 октября 2026 года, занятий нет — расписание пустое.",
+      "error": null,
+      "duration_ms": 2095,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call-db34f3ca-efcc-4351-a5b0-807c61b4589c",
+            "type": "function",
+            "function": {
+              "name": "get_schedule",
+              "arguments": "{\"date\":\"2026-10-13\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "get_schedule",
+          "arguments": {
+            "date": "2026-10-13"
+          },
+          "validation": "passed",
+          "execution": "success",
+          "reason": "personal_schedule"
+        }
+      ],
+      "mcp_calls": [
+        {
+          "name": "get_schedule",
+          "arguments": {
+            "date": "2026-10-13"
+          }
+        }
+      ],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "CoreWeave",
+          "usage": {
+            "prompt_tokens": 2153,
+            "completion_tokens": 44,
+            "total_tokens": 2197
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Wafer",
+          "usage": {
+            "prompt_tokens": 2255,
+            "completion_tokens": 24,
+            "total_tokens": 2279
+          }
+        }
+      ]
+    },
+    {
+      "id": "schedule_3",
+      "query": "Есть ли у меня пары в ближайшее воскресенье?",
+      "expected_action": "get_schedule",
+      "expected_arguments": {
+        "date": "2026-10-18"
+      },
+      "actual_action": "get_schedule",
+      "actual_arguments": {
+        "date": "2026-10-18"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Ближайшее воскресенье — 18 октября 2026 года. По данным расписания, занятий на эту дату нет (список пуст).",
+      "error": null,
+      "duration_ms": 1332,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-b3b46388f7539899",
+            "type": "function",
+            "function": {
+              "name": "get_schedule",
+              "arguments": "{\"date\": \"2026-10-18\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "get_schedule",
+          "arguments": {
+            "date": "2026-10-18"
+          },
+          "validation": "passed",
+          "execution": "success",
+          "reason": "personal_schedule"
+        }
+      ],
+      "mcp_calls": [
+        {
+          "name": "get_schedule",
+          "arguments": {
+            "date": "2026-10-18"
+          }
+        }
+      ],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2160,
+            "completion_tokens": 44,
+            "total_tokens": 2204
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2244,
+            "completion_tokens": 38,
+            "total_tokens": 2282
+          }
+        }
+      ]
+    },
+    {
+      "id": "reminder_1",
+      "query": "Напомни завтра в 18:30 отправить отчёт.",
+      "expected_action": "add_reminder",
+      "expected_arguments": {
+        "text": "отправить отчёт",
+        "remind_at": "2026-10-13T18:30:00+03:00"
+      },
+      "actual_action": "add_reminder",
+      "actual_arguments": {
+        "text": "Отправить отчёт",
+        "remind_at": "2026-10-13T18:30:00+03:00"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Подготовлено предложение с подтверждением.",
+      "error": null,
+      "duration_ms": 498,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "call_0_8d104ea7ae9aaafe",
+            "type": "function",
+            "function": {
+              "name": "add_reminder",
+              "arguments": "{\"text\":\"Отправить отчёт\",\"remind_at\":\"2026-10-13T18:30:00+03:00\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "add_reminder",
+          "arguments": {
+            "remind_at": "2026-10-13T18:30:00+03:00",
+            "text_length": 15
+          },
+          "validation": "passed",
+          "execution": "awaiting_confirmation",
+          "reason": "requires_confirmation"
+        }
+      ],
+      "mcp_calls": [],
+      "prepared_reminders": [
+        {
+          "text": "Отправить отчёт",
+          "remind_at": "2026-10-13T18:30:00+03:00"
+        }
+      ],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "River",
+          "usage": {
+            "prompt_tokens": 2160,
+            "completion_tokens": 77,
+            "total_tokens": 2237
+          }
+        }
+      ]
+    },
+    {
+      "id": "reminder_2",
+      "query": "Напомни 15 октября в 09:00 проверить расписание.",
+      "expected_action": "add_reminder",
+      "expected_arguments": {
+        "text": "проверить расписание",
+        "remind_at": "2026-10-15T09:00:00+03:00"
+      },
+      "actual_action": "add_reminder",
+      "actual_arguments": {
+        "text": "Проверить расписание",
+        "remind_at": "2026-10-15T09:00:00+03:00"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Подготовлено предложение с подтверждением.",
+      "error": null,
+      "duration_ms": 912,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-943b4e0c5c39e851",
+            "type": "function",
+            "function": {
+              "name": "add_reminder",
+              "arguments": "{\"text\": \"Проверить расписание\", \"remind_at\": \"2026-10-15T09:00:00+03:00\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "add_reminder",
+          "arguments": {
+            "remind_at": "2026-10-15T09:00:00+03:00",
+            "text_length": 20
+          },
+          "validation": "passed",
+          "execution": "awaiting_confirmation",
+          "reason": "requires_confirmation"
+        }
+      ],
+      "mcp_calls": [],
+      "prepared_reminders": [
+        {
+          "text": "Проверить расписание",
+          "remind_at": "2026-10-15T09:00:00+03:00"
+        }
+      ],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "InferenceNet",
+          "usage": {
+            "prompt_tokens": 2160,
+            "completion_tokens": 78,
+            "total_tokens": 2238
+          }
+        }
+      ]
+    },
+    {
+      "id": "reminder_3",
+      "query": "Через два часа напомни сделать перерыв.",
+      "expected_action": "add_reminder",
+      "expected_arguments": {
+        "text": "сделать перерыв",
+        "remind_at": "2026-10-12T11:00:00+03:00"
+      },
+      "actual_action": "add_reminder",
+      "actual_arguments": {
+        "text": "Сделать перерыв",
+        "remind_at": "2026-10-12T11:00:00+03:00"
+      },
+      "routing_correct": true,
+      "arguments_correct": true,
+      "answer": "Подготовлено предложение с подтверждением.",
+      "error": null,
+      "duration_ms": 697,
+      "first_decision": {
+        "role": "assistant",
+        "content": null,
+        "tool_calls": [
+          {
+            "id": "chatcmpl-tool-9cedd20fcd9e517f",
+            "type": "function",
+            "function": {
+              "name": "add_reminder",
+              "arguments": "{\"text\": \"Сделать перерыв\", \"remind_at\": \"2026-10-12T11:00:00+03:00\"}"
+            }
+          }
+        ]
+      },
+      "audit": [
+        {
+          "action": "tool",
+          "tool": "add_reminder",
+          "arguments": {
+            "remind_at": "2026-10-12T11:00:00+03:00",
+            "text_length": 15
+          },
+          "validation": "passed",
+          "execution": "awaiting_confirmation",
+          "reason": "requires_confirmation"
+        }
+      ],
+      "mcp_calls": [],
+      "prepared_reminders": [
+        {
+          "text": "Сделать перерыв",
+          "remind_at": "2026-10-12T11:00:00+03:00"
+        }
+      ],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2154,
+            "completion_tokens": 77,
+            "total_tokens": 2231
+          }
+        }
+      ]
+    },
+    {
+      "id": "respond_1",
+      "query": "Кратко объясни разницу между списком и кортежем в Python.",
+      "expected_action": "respond",
+      "expected_arguments": {},
+      "actual_action": "respond",
+      "actual_arguments": {},
+      "routing_correct": true,
+      "arguments_correct": null,
+      "answer": "**Коротко:** список (`list`) — изменяемый, кортеж (`tuple`) — неизменяемый. Список можно менять после создания, кортеж — нет.\n\n```python\nmy_list = [1, 2, 3]\nmy_list[0] = 10        # ок: список изменяемый\nmy_list.append(4)      # ок: можно добавлять элементы\n\nmy_tuple = (1, 2, 3)\nmy_tuple[0] = 10       # ошибка: TypeError, кортеж нельзя изменить\n```\n\n**Пояснение:**\n- **Список** — для коллекций, которые будут меняться: добавление, удаление, замена элементов.\n- **Кортеж** — для данных, которые должны оставаться постоянными. Он чуть «легче» и может использоваться как ключ словаря (список — нет).\n\n```python\nd = {(1, 2): \"точка\"}   # кортеж как ключ — можно\n# d = {[1, 2]: \"точка\"}  # список как ключ — ошибка\n```\n\nЕсли нужно, могу рассказать про другие отличия (скорость, память, распаковка).",
+      "error": null,
+      "duration_ms": 2632,
+      "first_decision": {
+        "role": "assistant",
+        "content": "**Коротко:** список (`list`) — изменяемый, кортеж (`tuple`) — неизменяемый. Список можно менять после создания, кортеж — нет.\n\n```python\nmy_list = [1, 2, 3]\nmy_list[0] = 10        # ок: список изменяемый\nmy_list.append(4)      # ок: можно добавлять элементы\n\nmy_tuple = (1, 2, 3)\nmy_tuple[0] = 10       # ошибка: TypeError, кортеж нельзя изменить\n```\n\n**Пояснение:**\n- **Список** — для коллекций, которые будут меняться: добавление, удаление, замена элементов.\n- **Кортеж** — для данных, которые должны оставаться постоянными. Он чуть «легче» и может использоваться как ключ словаря (список — нет).\n\n```python\nd = {(1, 2): \"точка\"}   # кортеж как ключ — можно\n# d = {[1, 2]: \"точка\"}  # список как ключ — ошибка\n```\n\nЕсли нужно, могу рассказать про другие отличия (скорость, память, распаковка)."
+      },
+      "audit": [
+        {
+          "action": "respond",
+          "tool": null,
+          "arguments": {},
+          "validation": "not_required",
+          "execution": "success",
+          "reason": "no_tool_needed"
+        }
+      ],
+      "mcp_calls": [],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Cohere",
+          "usage": {
+            "prompt_tokens": 2160,
+            "completion_tokens": 271,
+            "total_tokens": 2431
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "InferenceNet",
+          "usage": {
+            "prompt_tokens": 379,
+            "completion_tokens": 6,
+            "total_tokens": 385
+          }
+        }
+      ]
+    },
+    {
+      "id": "respond_2",
+      "query": "Переведи на английский: лабораторная работа завершена.",
+      "expected_action": "respond",
+      "expected_arguments": {},
+      "actual_action": "respond",
+      "actual_arguments": {},
+      "routing_correct": true,
+      "arguments_correct": null,
+      "answer": "**Короткий ответ:** «The lab work is completed.»\n\n**Пример:**\n```python\nphrase = \"лабораторная работа завершена\"\ntranslation = \"The lab work is completed.\"\nprint(translation)\n```\n\n**Пояснение:** «лабораторная работа» в учебном контексте обычно переводится как *lab work* (или *laboratory work*, *lab assignment*), а «завершена» — *is completed* / *has been completed*. Если нужен более формальный вариант: «The laboratory work has been completed.»",
+      "error": null,
+      "duration_ms": 1613,
+      "first_decision": {
+        "role": "assistant",
+        "content": "**Короткий ответ:** «The lab work is completed.»\n\n**Пример:**\n```python\nphrase = \"лабораторная работа завершена\"\ntranslation = \"The lab work is completed.\"\nprint(translation)\n```\n\n**Пояснение:** «лабораторная работа» в учебном контексте обычно переводится как *lab work* (или *laboratory work*, *lab assignment*), а «завершена» — *is completed* / *has been completed*. Если нужен более формальный вариант: «The laboratory work has been completed.»"
+      },
+      "audit": [
+        {
+          "action": "respond",
+          "tool": null,
+          "arguments": {},
+          "validation": "not_required",
+          "execution": "success",
+          "reason": "no_tool_needed"
+        }
+      ],
+      "mcp_calls": [],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Crusoe",
+          "usage": {
+            "prompt_tokens": 2158,
+            "completion_tokens": 122,
+            "total_tokens": 2280
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Wafer",
+          "usage": {
+            "prompt_tokens": 230,
+            "completion_tokens": 6,
+            "total_tokens": 236
+          }
+        }
+      ]
+    },
+    {
+      "id": "clarify_1",
+      "query": "Напомни вечером про лабораторную.",
+      "expected_action": "clarify",
+      "expected_arguments": {},
+      "actual_action": "clarify",
+      "actual_arguments": {},
+      "routing_correct": true,
+      "arguments_correct": null,
+      "answer": "Уточни, пожалуйста, время: во сколько именно вечером напомнить про лабораторную? Например, «в 19:00».",
+      "error": null,
+      "duration_ms": 1315,
+      "first_decision": {
+        "role": "assistant",
+        "content": "Уточни, пожалуйста, время: во сколько именно вечером напомнить про лабораторную? Например, «в 19:00»."
+      },
+      "audit": [
+        {
+          "action": "clarify",
+          "tool": null,
+          "arguments": {},
+          "validation": "not_required",
+          "execution": "success",
+          "reason": "missing_details"
+        }
+      ],
+      "mcp_calls": [],
+      "prepared_reminders": [],
+      "api_responses": [
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "Wafer",
+          "usage": {
+            "prompt_tokens": 2172,
+            "completion_tokens": 34,
+            "total_tokens": 2206
+          }
+        },
+        {
+          "status": 200,
+          "model": "deepseek/deepseek-v4.1-flash",
+          "provider": "River",
+          "usage": {
+            "prompt_tokens": 142,
+            "completion_tokens": 7,
+            "total_tokens": 149
+          }
+        }
+      ]
+    }
+  ],
+  "tool_names": [
+    "get_schedule",
+    "get_weather",
+    "add_lesson",
+    "add_reminder"
+  ],
+  "tool_schemas_sha256": "09f83d5b2448672fdd96202d4365b145b5482d56fd398d72296e56bc57773ca5",
+  "metrics": {
+    "routing_correct": 12,
+    "routing_total": 12,
+    "arguments_correct": 9,
+    "arguments_total": 9
+  },
+  "reported_models": [
+    "deepseek/deepseek-v4.1-flash"
+  ]
+}
