@@ -9,15 +9,19 @@ from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.chat_action import ChatActionSender
 
+from app.assistant_service import AssistantService
 from app.audit import AuditStore, AuditTrace, render_audit, safe_arguments
+from app.delivery_telegram import DeliveryDestinationMiddleware
 from app.formatting import format_answer
 from app.generation import TEMPERATURES
+from app.handlers.notifications import register_notifications
+from app.handlers.trace import TraceMiddleware, show_trace
 from app.history import DEFAULT_HISTORY_LIMITS, HistoryLimits, HistoryMessage, recent_history
+from app.lesson_confirmation import confirm_lesson, is_affirmation
 from app.llm import LlmClient, LlmError
 from app.mcp_client import ScheduleMcpClient
 from app.modes import MODES
 from app.personal_schedule import (
-    LessonSaved,
     PendingLesson,
     PersonalScheduleError,
     PersonalScheduleStore,
@@ -25,6 +29,7 @@ from app.personal_schedule import (
 from app.reminders import PendingReminder, ReminderError, ReminderSaved, ReminderStore
 from app.schedule_agent import ScheduleAgent
 from app.timezones import TimezoneResolver
+from app.tracing import mark_failed, span
 from app.user_state import UserStateError, UserStateStore
 
 logger = logging.getLogger(__name__)
@@ -39,7 +44,10 @@ START_TEXT = (
     "/reset — очистить историю и сохранить настройки.\n"
     "/tools — инструменты MCP-сервера.\n"
     "/why — объяснить последнее решение по вашему запросу.\n"
+    "/trace last — показать этапы обработки последнего запроса.\n"
     "/timezone Москва — установить часовой пояс; /timezone — показать его.\n"
+    "/city — выбрать город; /briefing_on и /briefing_off — сводка в 08:00;\n"
+    "/notifications — настройки уведомлений.\n"
     "Можно спросить текущую погоду или своё расписание. Чтобы добавить занятие, "
     "напишите дату, время начала и конца, название и место — я попрошу подтверждение.\n"
     "Можно попросить создать напоминание: сначала покажу время и попрошу подтверждение. "
@@ -48,14 +56,21 @@ START_TEXT = (
 )
 UNKNOWN_COMMAND_TEXT = (
     "Доступные команды: /start, /study, /translate, /quiz, /settings, /reset, /tools, "
-    "/timezone, /why ≽(-˕ - ≼マ. "
+    "/timezone, /why, /trace ≽(-˕ - ≼マ. "
     "Для вопроса отправьте обычный текст."
 )
 TEMPERATURE_BY_TEXT = {f"{value:.1f}": value for value in TEMPERATURES}
 
 
-async def start(message: Message) -> None:
-    await message.answer(START_TEXT, parse_mode=None)
+async def start(message: Message, delivery_enabled: bool = False) -> None:
+    text = START_TEXT
+    if delivery_enabled:
+        text = text.replace(
+            "Напоминания пока только сохраняются; "
+            "отправка уведомлений по времени ещё не подключена.",
+            "Подтверждённые напоминания доставляются автоматически.",
+        )
+    await message.answer(text, parse_mode=None)
 
 
 async def _save_audit(
@@ -242,6 +257,10 @@ async def answer_question(
     history_limits: HistoryLimits = DEFAULT_HISTORY_LIMITS,
     schedule_agent: ScheduleAgent | None = None,
     audit_store: AuditStore | None = None,
+    personal_schedule: PersonalScheduleStore | None = None,
+    schedule_mcp: ScheduleMcpClient | None = None,
+    assistant_service: AssistantService | None = None,
+    delivery_enabled: bool = False,
 ) -> None:
     if message.text is None:
         return
@@ -249,7 +268,17 @@ async def answer_question(
     user_id = message.from_user.id if message.from_user is not None else None
     trace = AuditTrace() if audit_store is not None else None
     try:
-        mode = MODES[await user_state.get_mode(chat_id)]
+        mode_name = await user_state.get_mode(chat_id)
+        mode = MODES[mode_name]
+        if personal_schedule is not None and schedule_mcp is not None:
+            if await text_lesson_confirmation(
+                message,
+                personal_schedule,
+                schedule_mcp,
+                audit_store,
+                allow_unreplied=mode_name == "study",
+            ):
+                return
         temperature = await user_state.get_temperature(chat_id)
         history = await user_state.get_history(chat_id)
         async with ChatActionSender.typing(bot=message.bot, chat_id=chat_id):
@@ -259,7 +288,16 @@ async def answer_question(
                 history=history,
                 temperature=temperature,
             )
-            if schedule_agent is not None:
+            if assistant_service is not None:
+                answer = await assistant_service.answer(
+                    message.text,
+                    **arguments,
+                    mode_name=mode_name,
+                    user_id=user_id,
+                    update_id=message.message_id,
+                    audit=trace,
+                )
+            elif schedule_agent is not None:
                 if trace is not None:
                     arguments["audit"] = trace
                 answer = await schedule_agent.answer(
@@ -271,16 +309,19 @@ async def answer_question(
             else:
                 answer = await llm.generate(message.text, **arguments)
         markup = None
+        lesson_action_id = None
         if isinstance(answer, PendingLesson):
             pending = answer
             draft = pending.payload
             answer = (
                 f"Добавить занятие в ваше расписание?\n{draft.date}, {draft.start}–{draft.end}\n"
                 f"{draft.title}\nМесто: {draft.location}\n"
-                f"Часовой пояс: {schedule_agent.timezone}\n"
-                "Подтверждение действует пять минут."
+                f"Часовой пояс: {(assistant_service or schedule_agent).timezone}\n"
+                "Подтверждение действует пять минут. "
+                "Нажмите кнопку или ответьте «да» / «всё верно»."
             )
             if pending.status in {"prepared", "confirmed"}:
+                lesson_action_id = pending.action_id
                 markup = InlineKeyboardMarkup(
                     inline_keyboard=[
                         [
@@ -308,7 +349,11 @@ async def answer_question(
                 f"Сохранить напоминание?\n{pending.payload.text}\n"
                 f"Когда: {local:%d.%m.%Y %H:%M:%S}\nЧасовой пояс: {pending.timezone}\n"
                 "Подтверждение действует не более пяти минут. "
-                "Уведомления по времени пока не отправляются."
+                + (
+                    "Автоматическая доставка включена."
+                    if delivery_enabled
+                    else "Автоматическая доставка отключена."
+                )
             )
             if pending.status in {"prepared", "confirmed"}:
                 markup = InlineKeyboardMarkup(
@@ -333,6 +378,7 @@ async def answer_question(
         ]
         await user_state.save_history(chat_id, recent_history(history + turn, history_limits))
     except (LlmError, UserStateError, PersonalScheduleError, ReminderError) as error:
+        mark_failed()
         saved = await _save_audit(
             audit_store,
             user_id,
@@ -359,7 +405,73 @@ async def answer_question(
     parts = format_answer(answer)
     for index, part in enumerate(parts):
         kwargs = {"reply_markup": markup} if markup is not None and index == len(parts) - 1 else {}
-        await message.answer(part.text, entities=part.entities, parse_mode=None, **kwargs)
+        with span("telegram", "send"):
+            sent = await message.answer(
+                part.text, entities=part.entities, parse_mode=None, **kwargs
+            )
+        if (
+            lesson_action_id is not None
+            and index == len(parts) - 1
+            and personal_schedule is not None
+            and isinstance(sent, Message)
+        ):
+            try:
+                await personal_schedule.bind_prompt(
+                    user_id, lesson_action_id, chat_id, sent.message_id
+                )
+            except PersonalScheduleError:
+                await message.answer(
+                    "Текстовое подтверждение временно недоступно. Используйте кнопку.",
+                    parse_mode=None,
+                )
+
+
+async def text_lesson_confirmation(
+    message: Message,
+    personal_schedule: PersonalScheduleStore,
+    schedule_mcp: ScheduleMcpClient,
+    audit_store: AuditStore | None = None,
+    *,
+    allow_unreplied: bool = True,
+) -> bool:
+    if (
+        not message.text
+        or not is_affirmation(message.text)
+        or message.from_user is None
+        or message.chat.type != "private"
+        or message.chat.id != message.from_user.id
+        or (not allow_unreplied and message.reply_to_message is None)
+    ):
+        return False
+    user_id = message.from_user.id
+    trace = AuditTrace() if audit_store is not None else None
+    processed = False
+    try:
+        pending = await personal_schedule.text_confirmation_candidate(
+            user_id,
+            message.chat.id,
+            message.message_id,
+            reply_to=message.reply_to_message.message_id if message.reply_to_message else None,
+        )
+        if pending is None:
+            return False
+        text = await confirm_lesson(
+            user_id, pending.action_id, personal_schedule, schedule_mcp, trace
+        )
+        processed = True
+    except PersonalScheduleError as error:
+        mark_failed()
+        _callback_audit_failure(trace, "add_lesson")
+        text = str(error)
+    except Exception:
+        mark_failed()
+        _callback_audit_failure(trace, "add_lesson")
+        text = "Не удалось обработать подтверждение. Попробуйте кнопку или повторите позже."
+    await _save_audit(
+        audit_store, user_id, f"message:{message.message_id}", trace, failed=not processed
+    )
+    await message.answer(text, parse_mode=None)
+    return True
 
 
 async def lesson_confirmation(
@@ -400,47 +512,16 @@ async def lesson_confirmation(
                     reason="cancelled_by_user" if cancelled else "unavailable_confirmation",
                 )
         elif action == "confirm":
-            pending = await personal_schedule.confirm(user_id, action_id)
-            if (
-                pending.user_id != user_id
-                or pending.action_id != action_id
-                or pending.status not in {"confirmed", "executed"}
-            ):
-                raise PersonalScheduleError("Подтверждение недоступно.")
-            if trace is not None:
-                trace.add(
-                    "tool",
-                    tool="add_lesson",
-                    arguments=safe_arguments("add_lesson", pending.payload.model_dump()),
-                    validation="passed",
-                    reason="confirmation_accepted",
-                )
-            result = await schedule_mcp.call_tool(
-                "add_lesson",
-                pending.payload.model_dump(),
-                user_id=user_id,
-                action_id=action_id,
-            )
-            if result.isError:
-                raise PersonalScheduleError(
-                    "Не удалось сохранить занятие. Попробуйте подтвердить снова."
-                )
-            saved = LessonSaved.model_validate(result.structuredContent)
-            for key, value in pending.payload.model_dump().items():
-                if getattr(saved, key) != value:
-                    raise PersonalScheduleError("Сервер вернул неожиданный результат сохранения.")
-            text = (
-                "Занятие добавлено" if saved.created else "Занятие уже было добавлено"
-            ) + f": {saved.date}, {saved.start}–{saved.end}\n{saved.title}\nМесто: {saved.location}"
-            if trace is not None:
-                trace.update(execution="success")
+            text = await confirm_lesson(user_id, action_id, personal_schedule, schedule_mcp, trace)
         else:
             raise PersonalScheduleError("Неизвестное действие.")
         processed = True
     except PersonalScheduleError as error:
+        mark_failed()
         _callback_audit_failure(trace, "add_lesson")
         text = str(error)
     except Exception:
+        mark_failed()
         _callback_audit_failure(trace, "add_lesson")
         text = "Не удалось обработать подтверждение. Попробуйте ещё раз."
     finally:
@@ -466,6 +547,7 @@ async def reminder_confirmation(
     reminders: ReminderStore,
     schedule_mcp: ScheduleMcpClient,
     audit_store: AuditStore | None = None,
+    delivery_enabled: bool = False,
 ) -> None:
     trace = AuditTrace() if audit_store is not None else None
     user_id = callback.from_user.id
@@ -539,7 +621,11 @@ async def reminder_confirmation(
             ) + (
                 f" №{saved.reminder_id}: {saved.text}\n"
                 f"Когда: {local:%d.%m.%Y %H:%M:%S} ({saved.timezone}).\n"
-                "Отправка уведомлений по времени ещё не подключена."
+                + (
+                    "Автоматическая доставка включена."
+                    if delivery_enabled
+                    else "Автоматическая доставка отключена."
+                )
             )
             if trace is not None:
                 trace.update(execution="success")
@@ -547,9 +633,11 @@ async def reminder_confirmation(
             raise ReminderError("Неизвестное действие.")
         processed = True
     except ReminderError as error:
+        mark_failed()
         _callback_audit_failure(trace, "add_reminder")
         text = str(error)
     except Exception:
+        mark_failed()
         _callback_audit_failure(trace, "add_reminder")
         text = "Не удалось обработать подтверждение напоминания. Попробуйте ещё раз."
     finally:
@@ -572,6 +660,8 @@ async def reminder_confirmation(
 
 def create_router() -> Router:
     router = Router(name="assistant")
+    router.message.outer_middleware(DeliveryDestinationMiddleware())
+    router.callback_query.outer_middleware(DeliveryDestinationMiddleware())
     router.message.filter(F.chat.type == "private", F.text)
     router.message.register(start, CommandStart())
     router.message.register(switch_mode, Command(commands=list(MODES)))
@@ -580,8 +670,14 @@ def create_router() -> Router:
     router.message.register(tools, Command("tools"))
     router.message.register(timezone, Command("timezone"))
     router.message.register(why, Command("why"))
+    router.message.register(show_trace, Command("trace"))
+    register_notifications(router)
     router.message.register(unknown_command, F.text.startswith("/"))
-    router.message.register(answer_question)
-    router.callback_query.register(lesson_confirmation, F.data.startswith("lesson:"))
-    router.callback_query.register(reminder_confirmation, F.data.startswith("reminder:"))
+    traced = Router(name="traced_requests")
+    traced.message.middleware(TraceMiddleware())
+    traced.callback_query.middleware(TraceMiddleware())
+    traced.message.register(answer_question)
+    traced.callback_query.register(lesson_confirmation, F.data.startswith("lesson:"))
+    traced.callback_query.register(reminder_confirmation, F.data.startswith("reminder:"))
+    router.include_router(traced)
     return router

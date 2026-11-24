@@ -1,8 +1,10 @@
 """Постоянные права компонентов и их пересечение с актуальным MCP discovery."""
 
 import copy
-from datetime import timedelta
+from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 from types import MappingProxyType
+from uuid import UUID
 
 from jsonschema import Draft202012Validator
 from mcp import types
@@ -15,10 +17,12 @@ from app.agent_contracts import (
     KnowledgeFacts,
     MaterialCatalog,
     MaterialHit,
+    ReminderProposalFacts,
     ScheduleFacts,
     WeatherFacts,
 )
 from app.mcp_client import ScheduleMcpClient
+from app.reminders import ReminderDraft, ReminderStore
 from app.schedule import DaySchedule, WeekSchedule, parse_date
 from app.weather import WeatherResult
 
@@ -80,7 +84,15 @@ class ScopedMcp:
     """
 
     def __init__(
-        self, client: ScheduleMcpClient, component: Component, request: AgentRequest
+        self,
+        client: ScheduleMcpClient,
+        component: Component,
+        request: AgentRequest,
+        *,
+        reminders: ReminderStore | None = None,
+        update_id: int | None = None,
+        prepare_reminder: bool = False,
+        clock: Callable[[], datetime] | None = None,
     ) -> None:
         self.__client = client
         self.__component = component
@@ -89,6 +101,54 @@ class ScopedMcp:
         self.__facts: Facts = EmptyFacts()
         self.__status = "needs_clarification"
         self.__resource_reads = 0
+        self.__reminders = reminders
+        self.__update_id = update_id
+        self.__allow_prepare = prepare_reminder
+        self.__clock = clock or (lambda: datetime.now(UTC))
+        self.__pending = None
+        self.__weather_result: WeatherResult | None = None
+
+    @property
+    def weather_result(self) -> WeatherResult | None:
+        return self.__weather_result.model_copy(deep=True) if self.__weather_result else None
+
+    @property
+    def pending_reminder(self):
+        return copy.deepcopy(self.__pending)
+
+    async def prepare_reminder(self, arguments: dict) -> None:
+        tool = allowed_tools(self.__component, self.__client.tools).get("add_reminder")
+        if (
+            tool is None
+            or self.__reminders is None
+            or self.__component != "schedule"
+            or not self.__allow_prepare
+            or self.__request.intent != "user_query"
+            or type(self.__update_id) is not int
+            or self.__update_id <= 0
+        ):
+            raise AccessDenied
+        arguments = copy.deepcopy(arguments)
+        Draft202012Validator(tool.inputSchema).validate(arguments)
+        draft = ReminderDraft.model_validate(arguments)
+        pending = await self.__reminders.prepare(
+            self.__request.actor_id, self.__update_id, draft, now=self.__clock()
+        )
+        if (
+            pending.user_id != self.__request.actor_id
+            or pending.payload.text != draft.text
+            or datetime.fromisoformat(pending.payload.remind_at)
+            != datetime.fromisoformat(draft.remind_at)
+        ):
+            raise ToolFailure
+        self.__pending = pending
+        self.__facts = ReminderProposalFacts(
+            action_id=UUID(pending.action_id),
+            draft=pending.payload,
+            timezone=pending.timezone,
+            expires_at=pending.expires_at,
+        )
+        self.__status = "needs_clarification"
 
     @property
     def used_tools(self) -> tuple[str, ...]:
@@ -136,6 +196,7 @@ class ScopedMcp:
             self.__status = "success"
         elif name == "get_weather":
             weather = WeatherResult.model_validate(data)
+            self.__weather_result = weather
             if weather.status == "ok":
                 self.__facts = WeatherFacts(weather=weather.weather)
                 self.__status = "success"

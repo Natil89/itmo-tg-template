@@ -86,6 +86,8 @@ CREATE TABLE IF NOT EXISTS personal_schedule_lessons (
 );
 CREATE INDEX IF NOT EXISTS personal_schedule_lessons_owner_date
     ON personal_schedule_lessons (user_id, lesson_date, start_time, id);
+ALTER TABLE personal_schedule_actions ADD COLUMN IF NOT EXISTS prompt_message_id BIGINT;
+ALTER TABLE personal_schedule_actions ADD COLUMN IF NOT EXISTS prompt_chat_id BIGINT;
 """
 
 _DB_ERRORS = (asyncpg.PostgresError, asyncpg.InterfaceError, OSError, TimeoutError)
@@ -308,6 +310,60 @@ class PersonalScheduleStore:
             return None
         async with self._connection() as connection, connection.transaction():
             return await self._locked_action(connection, user_id, identity, instant)
+
+    async def bind_prompt(
+        self, user_id: int, action_id: str, chat_id: int, message_id: int
+    ) -> None:
+        """Запоминает реально отправленную карточку; содержимое LLM здесь не используется."""
+        _owner(user_id)
+        if chat_id != user_id or type(message_id) is not int or message_id <= 0:
+            raise PersonalScheduleError("Подтверждение доступно только в личном чате.")
+        identity = _action_id(action_id)
+        if identity is None:
+            raise PersonalScheduleError("Действие не найдено.")
+        async with self._connection() as connection:
+            await connection.execute(
+                "UPDATE personal_schedule_actions SET prompt_message_id=$3, prompt_chat_id=$4 "
+                "WHERE user_id=$1 AND action_id=$2 AND status IN ('prepared','confirmed') "
+                "AND (prompt_message_id IS NULL OR prompt_message_id=$3)",
+                user_id,
+                identity,
+                message_id,
+                chat_id,
+            )
+
+    async def text_confirmation_candidate(
+        self,
+        user_id: int,
+        chat_id: int,
+        message_id: int,
+        *,
+        reply_to: int | None = None,
+        now: datetime | None = None,
+    ) -> PendingLesson | None:
+        """Только показанная карточка, текущий владелец, TTL; неоднозначность запрещена."""
+        _owner(user_id)
+        if chat_id != user_id or type(message_id) is not int or message_id <= 0:
+            raise PersonalScheduleError("Подтверждение доступно только в личном чате.")
+        if reply_to is not None and (type(reply_to) is not int or reply_to <= 0):
+            raise PersonalScheduleError("Не удалось определить карточку подтверждения.")
+        async with self._connection() as connection:
+            rows = await connection.fetch(
+                "SELECT * FROM personal_schedule_actions WHERE user_id=$1 AND prompt_chat_id=$2 "
+                "AND prompt_message_id < $3 AND status IN ('prepared','confirmed') "
+                "AND expires_at > $4 AND ($5::bigint IS NULL OR prompt_message_id=$5) LIMIT 2",
+                user_id,
+                chat_id,
+                message_id,
+                _now(now),
+                reply_to,
+            )
+        if len(rows) > 1:
+            raise PersonalScheduleError(
+                "Есть несколько предложений. Ответьте «да» именно на нужную карточку "
+                "через функцию Telegram «Ответить» или нажмите её кнопку."
+            )
+        return _pending(rows[0]) if rows else None
 
     async def confirm(
         self,

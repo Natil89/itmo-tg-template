@@ -7,20 +7,31 @@ from aiogram import Dispatcher
 from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiohttp import ClientSession
 
+from app.assistant_service import AssistantService
 from app.audit import AuditStore
+from app.briefing import BriefingService, BriefingStore
+from app.briefing_sources import BriefingSources
 from app.config import ConfigError, Settings
 from app.db import create_pool
+from app.delivery import DeliveryStore, ReminderDeliveryService
+from app.delivery_telegram import TelegramReminderSender
 from app.handlers.assistant import create_router
 from app.health import HealthState, start_health_server
+from app.lesson_compat import LessonCompatibility
 from app.llm import LlmClient
 from app.logging_setup import configure_logging
+from app.materials import MaterialsService
 from app.mcp_client import connect_schedule
+from app.notifications import CitySelection, NotificationStore
 from app.personal_schedule import PersonalScheduleStore
 from app.reminders import ReminderStore
-from app.schedule_agent import ScheduleAgent
+from app.specialists import KnowledgeAgent, LifestyleAgent, ScheduleSpecialist
+from app.supervisor import LlmRouter, Supervisor
 from app.telegram import TelegramStartupError, check_telegram_startup, create_bot
 from app.timezones import TimezoneResolver
+from app.tracing import TraceStore
 from app.user_state import UserStateStore
+from app.weather import WeatherService
 
 logger = logging.getLogger("app")
 
@@ -30,6 +41,9 @@ async def run(settings: Settings) -> None:
     state = HealthState()
     bot = create_bot(settings)
     runner = None
+    delivery_task = None
+    briefing_task = None
+    city_cleanup_task = None
     try:
         state.pool = await create_pool(settings)
         user_state = UserStateStore(state.pool)
@@ -38,6 +52,13 @@ async def run(settings: Settings) -> None:
         await personal_schedule.initialize()
         reminders = ReminderStore(state.pool)
         await reminders.initialize()
+        notification_store = NotificationStore(state.pool)
+        await notification_store.initialize()
+        briefing_store = BriefingStore(notification_store)
+        await briefing_store.initialize()
+        delivery_store = DeliveryStore(state.pool) if settings.reminder_delivery_enabled else None
+        if delivery_store is not None:
+            await delivery_store.initialize()
         proxy_password = urlsplit(settings.telegram_proxy_url).password or ""
         audit_store = AuditStore(
             state.pool,
@@ -51,6 +72,8 @@ async def run(settings: Settings) -> None:
             ),
         )
         await audit_store.initialize()
+        trace_store = TraceStore(state.pool)
+        await trace_store.initialize()
         logger.info("PostgreSQL подключён: SELECT 1 выполнен.")
         # Начальная проверка токена и маршрута через прокси ограничена по времени.
         async with asyncio.timeout(30):
@@ -76,12 +99,21 @@ async def run(settings: Settings) -> None:
                 base_url=settings.llm_base_url,
                 history_limits=settings.history_limits,
             )
-            schedule_agent = ScheduleAgent(
-                llm,
+            weather = WeatherService(llm_session, location_policy=settings.weather_location_policy)
+            city_selection = CitySelection(weather, notification_store)
+            supervisor = Supervisor(
+                LlmRouter(llm),
+                {
+                    "schedule": ScheduleSpecialist(llm),
+                    "knowledge": KnowledgeAgent(llm),
+                    "lifestyle": LifestyleAgent(llm),
+                },
                 schedule_mcp,
-                settings.schedule_timezone,
-                personal_store=personal_schedule,
                 reminders=reminders,
+                lesson_compat=LessonCompatibility(llm, schedule_mcp, personal_schedule),
+            )
+            assistant_service = AssistantService(
+                llm, supervisor, reminders, settings.schedule_timezone
             )
             # В личном чате вопрос и команда режима меняют одну строку истории.
             dispatcher = Dispatcher(events_isolation=SimpleEventIsolation())
@@ -93,10 +125,15 @@ async def run(settings: Settings) -> None:
                     db=state.pool,
                     llm=llm,
                     schedule_mcp=schedule_mcp,
-                    schedule_agent=schedule_agent,
+                    assistant_service=assistant_service,
                     personal_schedule=personal_schedule,
                     reminders=reminders,
                     audit_store=audit_store,
+                    trace_store=trace_store,
+                    delivery_store=delivery_store,
+                    delivery_enabled=settings.reminder_delivery_enabled,
+                    notification_store=notification_store,
+                    city_selection=city_selection,
                     timezone_resolver=TimezoneResolver(llm_session),
                     user_state=user_state,
                     history_limits=settings.history_limits,
@@ -105,15 +142,43 @@ async def run(settings: Settings) -> None:
                 )
             )
             state.initialized = True
+            city_cleanup_task = asyncio.create_task(city_selection.run_cleanup())
+            briefing_task = asyncio.create_task(
+                BriefingService(
+                    briefing_store,
+                    BriefingSources(state.pool, personal_schedule, weather, MaterialsService()),
+                    TelegramReminderSender(bot),
+                    trace_store=trace_store,
+                ).run()
+            )
+            if settings.reminder_delivery_enabled:
+                delivery_task = asyncio.create_task(
+                    ReminderDeliveryService(
+                        delivery_store, TelegramReminderSender(bot), trace_store=trace_store
+                    ).run()
+                )
             try:
                 await state.polling_task
             finally:
                 state.initialized = False
+                for task in (briefing_task, delivery_task, city_cleanup_task):
+                    if task is not None:
+                        task.cancel()
+                        await asyncio.gather(task, return_exceptions=True)
                 if not state.polling_task.done():
                     state.polling_task.cancel()
                     await asyncio.gather(state.polling_task, return_exceptions=True)
     finally:
         state.initialized = False
+        if city_cleanup_task is not None:
+            city_cleanup_task.cancel()
+            await asyncio.gather(city_cleanup_task, return_exceptions=True)
+        if briefing_task is not None:
+            briefing_task.cancel()
+            await asyncio.gather(briefing_task, return_exceptions=True)
+        if delivery_task is not None:
+            delivery_task.cancel()
+            await asyncio.gather(delivery_task, return_exceptions=True)
         if state.polling_task and not state.polling_task.done():
             state.polling_task.cancel()
             await asyncio.gather(state.polling_task, return_exceptions=True)

@@ -214,6 +214,7 @@ async def test_confirmation_uses_callback_owner_and_never_calls_model(monkeypatc
     )
     store = Mock(confirm=AsyncMock(return_value=pending))
     mcp = Mock(
+        tools=[Tool(name="add_lesson", inputSchema=LessonDraft.model_json_schema())],
         call_tool=AsyncMock(
             return_value=CallToolResult(
                 content=[],
@@ -223,7 +224,7 @@ async def test_confirmation_uses_callback_owner_and_never_calls_model(monkeypatc
                     "created": True,
                 },
             )
-        )
+        ),
     )
     await lesson_confirmation(query, store, mcp)
     store.confirm.assert_awaited_once_with(101, pending.action_id)
@@ -237,7 +238,10 @@ async def test_foreign_confirmation_fails_before_mcp(monkeypatch):
     monkeypatch.setattr(CallbackQuery, "answer", AsyncMock())
     monkeypatch.setattr(Message, "answer", AsyncMock())
     store = Mock(confirm=AsyncMock(side_effect=PersonalScheduleError("Действие недоступно.")))
-    mcp = Mock(call_tool=AsyncMock())
+    mcp = Mock(
+        tools=[Tool(name="add_lesson", inputSchema=LessonDraft.model_json_schema())],
+        call_tool=AsyncMock(),
+    )
     await lesson_confirmation(callback(user_id=202), store, mcp)
     assert store.confirm.call_args.args[0] == 202
     mcp.call_tool.assert_not_called()

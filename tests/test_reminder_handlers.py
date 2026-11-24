@@ -136,7 +136,7 @@ async def test_confirmation_uses_callback_owner_and_normalizes_success_time(tele
     )
     assert "Напоминание сохранено №7" in answer.call_args.args[0]
     assert "02.01.2030 18:00:00 (Europe/Moscow)" in answer.call_args.args[0]
-    assert "не подключена" in answer.call_args.args[0]
+    assert "Автоматическая доставка отключена." in answer.call_args.args[0]
     acknowledge.assert_awaited_once()
     edit.assert_awaited_once_with(reply_markup=None)
 

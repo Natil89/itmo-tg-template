@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.reminders import ReminderDraft
 from app.schedule import DaySchedule
 from app.weather import CurrentWeather
 
@@ -27,6 +28,16 @@ class RouteDecision(Contract):
     # Короткое публичное обоснование, не chain-of-thought и не диагностический лог.
     reason: str = Field(min_length=1, max_length=300)
     confidence: Confidence
+    dialogue: bool = False
+    operation: Literal["read", "prepare_reminder", "prepare_lesson"] = "read"
+
+    @model_validator(mode="after")
+    def consistent_operation(self) -> "RouteDecision":
+        if self.operation != "read" and self.target != "schedule":
+            raise ValueError("Изменения относятся только к расписанию.")
+        if self.dialogue and (self.target != "clarify" or self.operation != "read"):
+            raise ValueError("Обычный диалог не получает предметных действий.")
+        return self
 
     @field_validator("reason")
     @classmethod
@@ -34,6 +45,11 @@ class RouteDecision(Contract):
         if not value.strip():
             raise ValueError("Нужно краткое обоснование маршрута.")
         return value.strip()
+
+
+class DialogueTurn(Contract):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
 
 
 class AgentRequest(Contract):
@@ -44,6 +60,13 @@ class AgentRequest(Contract):
     intent: Intent
     occurred_at: datetime
     timezone: str
+    history: tuple[DialogueTurn, ...] = Field(default=(), max_length=4)
+
+    @model_validator(mode="after")
+    def background_has_no_history(self) -> "AgentRequest":
+        if self.intent != "user_query" and self.history:
+            raise ValueError("Фоновый запрос не наследует историю диалога.")
+        return self
 
     @field_validator("occurred_at")
     @classmethod
@@ -135,8 +158,17 @@ class EmptyFacts(Contract):
     kind: Literal["empty"] = "empty"
 
 
+class ReminderProposalFacts(Contract):
+    kind: Literal["reminder_proposal"] = "reminder_proposal"
+    action_id: UUID
+    draft: ReminderDraft
+    timezone: str
+    expires_at: datetime
+
+
 Facts = Annotated[
-    ScheduleFacts | KnowledgeFacts | WeatherFacts | EmptyFacts, Field(discriminator="kind")
+    ScheduleFacts | KnowledgeFacts | WeatherFacts | EmptyFacts | ReminderProposalFacts,
+    Field(discriminator="kind"),
 ]
 
 
@@ -156,7 +188,10 @@ class AgentResult(Contract):
     @model_validator(mode="after")
     def consistent_result(self) -> "AgentResult":
         expected = {"schedule": "schedule", "knowledge": "knowledge", "lifestyle": "weather"}
-        if self.facts.kind not in {expected[self.component], "empty"}:
+        kinds = {expected[self.component], "empty"}
+        if self.component == "schedule":
+            kinds.add("reminder_proposal")
+        if self.facts.kind not in kinds:
             raise ValueError("Факты не соответствуют специалисту.")
         if (self.status == "failed") != (self.error_code is not None):
             raise ValueError("Код ошибки должен соответствовать статусу failed.")

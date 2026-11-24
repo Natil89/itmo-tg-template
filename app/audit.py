@@ -37,7 +37,9 @@ Reason = Literal[
     "unavailable_confirmation",
     "classification_unavailable",
 ]
-_TOOLS = frozenset({"get_schedule", "get_weather", "add_lesson", "add_reminder"})
+_TOOLS = frozenset(
+    {"get_schedule", "get_weather", "add_lesson", "add_reminder", "search_materials"}
+)
 _TIME = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 _INSTANT = re.compile(
     r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})$"

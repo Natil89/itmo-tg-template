@@ -36,6 +36,7 @@ class Settings:
     schedule_file: Path = DEFAULT_SCHEDULE
     schedule_timezone: str = "Europe/Moscow"
     weather_location_policy: str = "population"
+    reminder_delivery_enabled: bool = False
 
     def validate_llm(self) -> None:
         """LLM обязателен для бота, но не для подготовки БД и healthcheck."""
@@ -122,6 +123,9 @@ class Settings:
         if level not in {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}:
             raise ConfigError("LOG_LEVEL: используйте DEBUG, INFO, WARNING, ERROR или CRITICAL.")
         schedule_timezone = value("SCHEDULE_TIMEZONE", "Europe/Moscow")
+        delivery_enabled = value("REMINDER_DELIVERY_ENABLED", "false").lower()
+        if delivery_enabled not in {"true", "false"}:
+            raise ConfigError("REMINDER_DELIVERY_ENABLED: используйте true или false.")
         weather_policy = value("WEATHER_LOCATION_POLICY", "population")
         if weather_policy not in {"strict", "population"}:
             raise ConfigError("WEATHER_LOCATION_POLICY: выберите strict или population.")
@@ -142,6 +146,7 @@ class Settings:
             schedule_file=Path(value("SCHEDULE_FILE", str(DEFAULT_SCHEDULE))),
             schedule_timezone=schedule_timezone,
             weather_location_policy=weather_policy,
+            reminder_delivery_enabled=delivery_enabled == "true",
             llm_api_key=value("LLM_API_KEY").strip(),
             llm_model=value("LLM_MODEL").strip(),
             llm_base_url=value("LLM_BASE_URL", "https://openrouter.ai/api/v1").strip(),

@@ -20,6 +20,7 @@ from app.history import (
     estimate_message,
     recent_history,
 )
+from app.tracing import Span, span
 
 logger = logging.getLogger(__name__)
 
@@ -336,6 +337,10 @@ class LlmClient:
         return message["content"]
 
     async def _request(self, payload: dict) -> dict:
+        with span("llm", "completion") as step:
+            return await self._request_http(payload, step)
+
+    async def _request_http(self, payload: dict, step: Span) -> dict:
         """Общая HTTP-граница для текстовых ответов и вызова инструментов."""
         request_id = uuid4().hex
         started = perf_counter()
@@ -359,6 +364,8 @@ class LlmClient:
                     raise LlmError("Сервис модели недоступен. Попробуйте позже.")
                 result = await response.json()
 
+            if isinstance(result, dict):
+                step.provider_usage(result.get("usage"))
             if not isinstance(result, dict) or result.get("error"):
                 raise LlmError("Сервис модели вернул некорректный ответ. Попробуйте позже.")
             choices = result.get("choices")
@@ -370,6 +377,7 @@ class LlmClient:
             outcome = "ok"
             return choice
         except TimeoutError:
+            step.error_code = "timeout"
             raise LlmError("Модель не ответила вовремя. Попробуйте позже.") from None
         except aiohttp.ClientError:
             raise LlmError("Не удалось связаться с моделью. Попробуйте позже.") from None

@@ -18,6 +18,7 @@ from mcp.types import Resource, Tool
 
 from app.mcp_identity import IdentityError, sign_context
 from app.schedule import DEFAULT_SCHEDULE
+from app.tracing import span
 
 if TYPE_CHECKING:
     from app.config import Settings
@@ -65,13 +66,17 @@ class ScheduleMcpClient:
                 arguments,
                 action_id=action_id,
             )
-        async with asyncio.timeout(self.request_timeout_seconds):
-            return await self.session.call_tool(
-                name,
-                arguments,
-                read_timeout_seconds=timedelta(seconds=self.request_timeout_seconds),
-                meta=meta,
-            )
+        with span("mcp", "call_tool", tool=name) as step:
+            async with asyncio.timeout(self.request_timeout_seconds):
+                result = await self.session.call_tool(
+                    name,
+                    arguments,
+                    read_timeout_seconds=timedelta(seconds=self.request_timeout_seconds),
+                    meta=meta,
+                )
+            if result.isError is True:
+                step.status, step.error_code = "failed", "tool_failed"
+            return result
 
     async def read_current_week(self, user_id: int | None = None) -> types.ReadResourceResult:
         return await self.read_resource("schedule://current-week", user_id=user_id)
@@ -96,16 +101,17 @@ class ScheduleMcpClient:
                     {},
                 )
             )
-        async with asyncio.timeout(self.request_timeout_seconds):
-            return await self.session.send_request(
-                types.ClientRequest(
-                    types.ReadResourceRequest(
-                        params=types.ReadResourceRequestParams(uri=uri, _meta=meta),
-                    )
-                ),
-                types.ReadResourceResult,
-                request_read_timeout_seconds=timedelta(seconds=self.request_timeout_seconds),
-            )
+        with span("mcp", "read_resource"):
+            async with asyncio.timeout(self.request_timeout_seconds):
+                return await self.session.send_request(
+                    types.ClientRequest(
+                        types.ReadResourceRequest(
+                            params=types.ReadResourceRequestParams(uri=uri, _meta=meta),
+                        )
+                    ),
+                    types.ReadResourceResult,
+                    request_read_timeout_seconds=timedelta(seconds=self.request_timeout_seconds),
+                )
 
     async def refresh(self) -> None:
         if self.session is None:
@@ -158,6 +164,9 @@ async def connect_schedule(
             async with AsyncExitStack() as stack:
                 schedule_path = await asyncio.to_thread(path.resolve)
                 process_env = {"PYTHONUTF8": "1", "PYTHONUNBUFFERED": "1"}
+                if sys.dont_write_bytecode:
+                    # Родительский -B должен действовать и в отдельном MCP-процессе.
+                    process_env["PYTHONDONTWRITEBYTECODE"] = "1"
                 if database_settings is not None:
                     process_env.update(
                         {

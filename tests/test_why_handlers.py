@@ -7,7 +7,7 @@ import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.methods import SendMessage
 from aiogram.types import CallbackQuery, Chat, Message, Update, User
-from mcp.types import CallToolResult
+from mcp.types import CallToolResult, Tool
 
 from app.audit import AuditError, AuditRecord, AuditTrace
 from app.handlers.assistant import (
@@ -318,6 +318,13 @@ def callback(kind, *, user_id=101, chat_id=None, action="confirm"):
     )
 
 
+def callback_tools():
+    return [
+        Tool(name="add_lesson", inputSchema=LessonDraft.model_json_schema()),
+        Tool(name="add_reminder", inputSchema=ReminderDraft.model_json_schema()),
+    ]
+
+
 def confirmation(kind, *, foreign=False, created=True):
     owner = 202 if foreign else 101
     if kind == "lesson":
@@ -368,7 +375,8 @@ async def test_confirmation_audit_is_saved_before_telegram_success(telegram, kin
     audit_store = Mock(save=AsyncMock(side_effect=save))
     business = Mock(confirm=AsyncMock(return_value=pending))
     mcp = Mock(
-        call_tool=AsyncMock(return_value=CallToolResult(content=[], structuredContent=result))
+        tools=callback_tools(),
+        call_tool=AsyncMock(return_value=CallToolResult(content=[], structuredContent=result)),
     )
     await handler(callback(kind), business, mcp, audit_store)
     assert order == ["audit", "reply"]
@@ -390,7 +398,7 @@ async def test_foreign_callback_does_not_audit_other_users_payload(telegram, kin
     _, _, _ = telegram
     handler, pending, _, _ = confirmation(kind, foreign=True)
     business = Mock(confirm=AsyncMock(return_value=pending))
-    audit_store, mcp = Mock(save=AsyncMock()), Mock(call_tool=AsyncMock())
+    audit_store, mcp = Mock(save=AsyncMock()), Mock(tools=callback_tools(), call_tool=AsyncMock())
     await handler(callback(kind), business, mcp, audit_store)
     step = audit_store.save.call_args.args[2].steps[0]
     assert step.arguments == {}
@@ -403,7 +411,7 @@ async def test_foreign_callback_does_not_audit_other_users_payload(telegram, kin
 async def test_expired_or_unavailable_callback_audits_rejection_without_arguments(telegram, kind):
     handler, _, _, error_type = confirmation(kind)
     business = Mock(confirm=AsyncMock(side_effect=error_type("Подтверждение недоступно.")))
-    audit_store, mcp = Mock(save=AsyncMock()), Mock(call_tool=AsyncMock())
+    audit_store, mcp = Mock(save=AsyncMock()), Mock(tools=callback_tools(), call_tool=AsyncMock())
     await handler(callback(kind), business, mcp, audit_store)
     step = audit_store.save.call_args.args[2].steps[0]
     assert (step.arguments, step.validation, step.execution, step.reason) == (
@@ -420,7 +428,7 @@ async def test_expired_or_unavailable_callback_audits_rejection_without_argument
 async def test_cancellation_audit_never_contains_unread_payload(telegram, kind, cancelled):
     handler, _, _, _ = confirmation(kind)
     business = Mock(cancel=AsyncMock(return_value=cancelled), confirm=AsyncMock())
-    audit_store, mcp = Mock(save=AsyncMock()), Mock(call_tool=AsyncMock())
+    audit_store, mcp = Mock(save=AsyncMock()), Mock(tools=callback_tools(), call_tool=AsyncMock())
     await handler(callback(kind, action="cancel"), business, mcp, audit_store)
     step = audit_store.save.call_args.args[2].steps[0]
     assert step.arguments == {}
@@ -436,7 +444,8 @@ async def test_callback_audit_failure_does_not_retry_committed_action(telegram, 
     handler, pending, result, _ = confirmation(kind)
     business = Mock(confirm=AsyncMock(return_value=pending))
     mcp = Mock(
-        call_tool=AsyncMock(return_value=CallToolResult(content=[], structuredContent=result))
+        tools=callback_tools(),
+        call_tool=AsyncMock(return_value=CallToolResult(content=[], structuredContent=result)),
     )
     audit_store = Mock(save=AsyncMock(side_effect=AuditError("private-secret")))
     await handler(callback(kind), business, mcp, audit_store)
@@ -453,7 +462,9 @@ async def test_mcp_failure_is_audited_without_claiming_success(telegram, kind):
     answer, _, _ = telegram
     handler, pending, _, _ = confirmation(kind)
     business = Mock(confirm=AsyncMock(return_value=pending))
-    mcp = Mock(call_tool=AsyncMock(side_effect=ConnectionError("private-secret")))
+    mcp = Mock(
+        tools=callback_tools(), call_tool=AsyncMock(side_effect=ConnectionError("private-secret"))
+    )
     audit_store = Mock(save=AsyncMock())
     await handler(callback(kind), business, mcp, audit_store)
     step = audit_store.save.call_args.args[2].steps[0]

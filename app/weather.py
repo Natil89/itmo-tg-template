@@ -85,6 +85,19 @@ class CurrentWeather(WeatherLocation):
         return self
 
 
+class GeoCity(WeatherLocation):
+    model_config = ConfigDict(extra="forbid", strict=True, frozen=True)
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
+
+    @property
+    def place(self) -> str:
+        parts = [self.city, self.country]
+        if self.admin1 and _location_name(self.admin1) != _location_name(self.city):
+            parts.append(self.admin1)
+        return ", ".join(parts)
+
+
 class WeatherResult(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -290,6 +303,68 @@ class WeatherService:
             observed_at=local.isoformat(),
             timezone=zone_name,
         )
+
+    async def find_cities(self, query: str) -> list[GeoCity]:
+        query = normalize_city(query)
+        parts = [part.strip() for part in query.split(",")]
+        if any(not part for part in parts) or len(parts) > 3:
+            raise WeatherError("Укажите город и при необходимости страну/регион через запятую.")
+        try:
+            async with asyncio.timeout(TOTAL_TIMEOUT_SECONDS):
+                language = "en" if len(parts) > 1 and parts[1].isascii() else "ru"
+                data = await self._get_json(
+                    GEOCODING_URL, {"name": parts[0], "count": 100, "language": language}
+                )
+                rows = data.get("results", [])
+                if (
+                    not isinstance(rows, list)
+                    or len(rows) > 100
+                    or any(not isinstance(row, dict) for row in rows)
+                ):
+                    raise ValueError
+                if len(parts) > 1:
+                    rows = [
+                        row
+                        for row in rows
+                        if all(
+                            _location_name(part)
+                            in {
+                                _location_name(str(row.get(field, "")))
+                                for field in ("country", "country_code", "admin1", "admin2")
+                            }
+                            for part in parts[1:]
+                        )
+                    ]
+                return [
+                    GeoCity(
+                        **item.public.model_dump(), latitude=item.latitude, longitude=item.longitude
+                    )
+                    for item in self._locations({"results": rows}, parts[0])[:5]
+                ]
+        except (ValueError, TypeError, KeyError, TimeoutError):
+            raise WeatherError(
+                "Не удалось проверить город. Уточните название или повторите позже."
+            ) from None
+
+    async def weather_at(self, city: GeoCity) -> CurrentWeather:
+        city = GeoCity.model_validate(city.model_dump())
+        try:
+            async with asyncio.timeout(TOTAL_TIMEOUT_SECONDS):
+                data = await self._get_json(
+                    WEATHER_URL,
+                    {
+                        "latitude": city.latitude,
+                        "longitude": city.longitude,
+                        "current": "temperature_2m,weather_code,wind_speed_10m",
+                        "temperature_unit": "celsius",
+                        "wind_speed_unit": "ms",
+                        "timezone": "auto",
+                    },
+                )
+                public = WeatherLocation(city=city.city, country=city.country, admin1=city.admin1)
+                return self._current(data, _Location(public, city.latitude, city.longitude))
+        except (ValueError, TypeError, KeyError, TimeoutError):
+            raise WeatherError("Не удалось получить погоду подтверждённого города.") from None
 
     async def get_weather(self, city: str) -> WeatherResult:
         city = normalize_city(city)
